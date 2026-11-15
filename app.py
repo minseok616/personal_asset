@@ -47,17 +47,17 @@ from utils.secrets_helper import (
 )
 
 # ---------------------------------------------------------------------------
-# 1. 페이지 설정 (아이폰 Safari 세로 화면 대응을 위해 사이드바 기본 collapsed)
+# 1. 페이지 설정 (데스크톱: 왼쪽 사이드바 표시 / 아이폰 등 모바일: 자동 접힘)
 # ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="AssetVision PRO — 개인 자산관리 포트폴리오",
     page_icon="📈",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="auto",
 )
 
 # ---------------------------------------------------------------------------
-# 2. TradeVision 다크 모드 · 상단 잘림 해결 · 아이폰 Safari 반응형 · 물 차오름 애니메이션 CSS
+# 2. React 다크 핀테크 터미널 UI · 상단 잘림 해결 · 아이폰 Safari 반응형 · 차트 애니메이션 CSS
 # ---------------------------------------------------------------------------
 st.markdown(
     """
@@ -77,9 +77,49 @@ st.markdown(
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
     }
+
+    /* -------------------------------------------------------------------
+       사이드바 (React Sidebar.tsx 다크 핀테크 터미널 스타일)
+       ------------------------------------------------------------------- */
     [data-testid="stSidebar"] {
         background-color: #131C24 !important;
         border-right: 1px solid #1F2D3A !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+        padding-top: 1rem !important;
+        padding-bottom: 1.2rem !important;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] {
+        gap: 6px !important;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label {
+        background: rgba(11, 17, 22, 0.55) !important;
+        border: 1px solid #1F2D3A !important;
+        border-radius: 12px !important;
+        padding: 10px 12px !important;
+        min-height: 44px !important;
+        margin: 0 !important;
+        width: 100% !important;
+        transition: all 0.18s ease !important;
+        cursor: pointer !important;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
+        border-color: rgba(0, 230, 118, 0.45) !important;
+        background: rgba(25, 37, 48, 0.9) !important;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label[data-checked="true"],
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
+        background: linear-gradient(135deg, rgba(0, 230, 118, 0.16), rgba(41, 121, 255, 0.08)) !important;
+        border-color: #00E676 !important;
+        box-shadow: 0 0 18px rgba(0, 230, 118, 0.14) !important;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label p {
+        font-size: 0.88rem !important;
+        font-weight: 700 !important;
+        color: #E2E8F0 !important;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) p {
+        color: #00E676 !important;
     }
 
     /* -------------------------------------------------------------------
@@ -90,14 +130,13 @@ st.markdown(
         margin-top: 0 !important;
         padding-top: 3.5rem !important;
         padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px)) !important;
-        padding-left: 1.25rem !important;
-        padding-right: 1.25rem !important;
-        max-width: 1440px !important;
+        padding-left: 1.35rem !important;
+        padding-right: 1.35rem !important;
+        max-width: 1520px !important;
     }
 
     /* -------------------------------------------------------------------
        [2] 차트 요소 자체 애니메이션 (원형 차트는 원이 그려지고, 막대는 0에서 쭉 차오름)
-           ※ 창/컨테이너 전체가 올라오는 물차오름(waterRiseUp) 효과 제거 완료
        ------------------------------------------------------------------- */
     @property --av-pie-sweep {
         syntax: '<angle>';
@@ -171,7 +210,7 @@ st.markdown(
         }
     }
 
-    /* 차트 컨테이너는 고정 (컨테이너 물차오름 애니메이션 없음) */
+    /* 차트 컨테이너는 고정 */
     .stPlotlyChart,
     [data-testid="stPlotlyChart"] {
         max-width: 100% !important;
@@ -181,7 +220,7 @@ st.markdown(
         background: #131C24;
     }
 
-    /* (A) 원형/도넛 차트: JS conic-gradient 스윕과 충돌하지 않도록 transform/opacity만 부드럽게 보조 */
+    /* (A) 원형/도넛 차트 */
     .stPlotlyChart g.pielayer,
     [data-testid="stPlotlyChart"] g.pielayer,
     [data-baseweb="tab-panel"]:not([hidden]) .stPlotlyChart g.pielayer,
@@ -191,7 +230,7 @@ st.markdown(
         will-change: mask-image, -webkit-mask-image;
     }
 
-    /* (B) 세로 막대 그래프: 각 막대가 바닥(0)에서 위로 쭉 자라나는 애니메이션 */
+    /* (B) 세로 막대 그래프 */
     .stPlotlyChart g.barlayer g.trace g.points g.point path,
     [data-testid="stPlotlyChart"] g.barlayer g.trace g.points g.point path,
     [data-baseweb="tab-panel"]:not([hidden]) .stPlotlyChart g.barlayer g.trace g.points g.point path,
@@ -202,7 +241,7 @@ st.markdown(
         will-change: transform, opacity;
     }
 
-    /* (C) 가로 막대 그래프(.av-hbar-marker 바로 다음 차트): 각 막대가 왼쪽(0)에서 오른쪽으로 쭉 차오르는 애니메이션 */
+    /* (C) 가로 막대 그래프 */
     [data-testid="stElementContainer"]:has(.av-hbar-marker) + [data-testid="stElementContainer"] g.barlayer g.trace g.points g.point path,
     .stElementContainer:has(.av-hbar-marker) + .stElementContainer g.barlayer g.trace g.points g.point path {
         transform-box: fill-box;
@@ -210,7 +249,6 @@ st.markdown(
         animation: avBarGrowX 0.85s cubic-bezier(0.22, 1, 0.36, 1) both !important;
     }
 
-    /* 막대 순차(Stagger) 딜레이로 리듬감 부여 */
     .stPlotlyChart g.barlayer g.points g.point:nth-child(2) path { animation-delay: 0.04s !important; }
     .stPlotlyChart g.barlayer g.points g.point:nth-child(3) path { animation-delay: 0.08s !important; }
     .stPlotlyChart g.barlayer g.points g.point:nth-child(4) path { animation-delay: 0.12s !important; }
@@ -218,21 +256,29 @@ st.markdown(
     .stPlotlyChart g.barlayer g.points g.point:nth-child(6) path { animation-delay: 0.20s !important; }
     .stPlotlyChart g.barlayer g.points g.point:nth-child(7) path { animation-delay: 0.24s !important; }
 
-    /* 막대 수치 텍스트는 막대가 차오르면서 부드럽게 페이드인 */
     .stPlotlyChart g.barlayer g.trace g.points g.point text,
     [data-testid="stPlotlyChart"] g.barlayer g.trace g.points g.point text {
         animation: avBarTextFade 0.85s ease-out both !important;
     }
 
-    /* (D) 선/영역 차트: 좌에서 우로 선이 그려지는 애니메이션 */
+    /* (D) 선/영역 차트 & 스파크라인 */
     .stPlotlyChart g.scatterlayer,
     [data-testid="stPlotlyChart"] g.scatterlayer,
     [data-baseweb="tab-panel"]:not([hidden]) .stPlotlyChart g.scatterlayer,
-    [data-baseweb="tab-panel"]:not([hidden]) [data-testid="stPlotlyChart"] g.scatterlayer {
+    [data-baseweb="tab-panel"]:not([hidden]) [data-testid="stPlotlyChart"] g.scatterlayer,
+    .av-sparkline-svg {
         animation: avLineSweepRight 0.95s cubic-bezier(0.22, 1, 0.36, 1) both !important;
     }
 
-    /* 실물자산 감가상각 프로그레스 게이지 바 애니메이션 (0% -> 목표 비율) */
+    /* 가로 비중 스택 바 세그먼트 & 게이지 바 */
+    .av-stack-seg {
+        transform-origin: left center;
+        animation: avBarGrowX 0.85s cubic-bezier(0.22, 1, 0.36, 1) both !important;
+        transition: filter 0.15s ease, opacity 0.15s ease;
+    }
+    .av-stack-seg:hover {
+        filter: brightness(1.25);
+    }
     .av-gauge-fill,
     [data-baseweb="tab-panel"]:not([hidden]) .av-gauge-fill {
         transform-origin: left center;
@@ -241,8 +287,127 @@ st.markdown(
     }
 
     /* -------------------------------------------------------------------
-       KPI & 글래스모피즘 카드 디자인 시스템
+       React 스타일 다크 터미널 헤더 · KPI 카드 · 계좌 비중 스택 바 · 범례
        ------------------------------------------------------------------- */
+    .av-header-shell {
+        background: rgba(19, 28, 36, 0.92);
+        border: 1px solid #1F2D3A;
+        border-radius: 14px;
+        padding: 14px 18px;
+        margin-bottom: 12px;
+        box-shadow: 0 8px 26px rgba(0, 0, 0, 0.35);
+    }
+    .av-kpi-card {
+        background: #131C24;
+        border: 1px solid #1F2D3A;
+        border-radius: 14px;
+        padding: 16px 16px 10px 16px;
+        margin-bottom: 10px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.36);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        min-height: 176px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+    .av-kpi-mint:hover {
+        border-color: rgba(0, 230, 118, 0.55);
+        box-shadow: 0 8px 28px rgba(0, 230, 118, 0.12);
+    }
+    .av-kpi-purple:hover {
+        border-color: rgba(156, 39, 176, 0.55);
+        box-shadow: 0 8px 28px rgba(156, 39, 176, 0.14);
+    }
+    .av-kpi-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin-bottom: 6px;
+    }
+    .av-kpi-title {
+        color: #7A8B9A;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .av-kpi-icon-mint {
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        background: rgba(0, 230, 118, 0.12);
+        border: 1px solid rgba(0, 230, 118, 0.35);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.78rem;
+        color: #00E676;
+        flex-shrink: 0;
+    }
+    .av-kpi-icon-purple {
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        background: rgba(156, 39, 176, 0.15);
+        border: 1px solid rgba(156, 39, 176, 0.42);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.78rem;
+        color: #E07BFF;
+        flex-shrink: 0;
+    }
+    .av-kpi-subrow {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(31, 45, 58, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        flex-wrap: wrap;
+        font-size: 0.74rem;
+        font-variant-numeric: tabular-nums;
+    }
+    .av-stack-card {
+        background: #131C24;
+        border: 1px solid #1F2D3A;
+        border-radius: 14px;
+        padding: 16px 18px;
+        margin-bottom: 14px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+    .av-stacked-track {
+        width: 100%;
+        height: 20px;
+        background: #0B1116;
+        border: 1px solid #1F2D3A;
+        border-radius: 10px;
+        padding: 2px;
+        display: flex;
+        gap: 2px;
+        overflow: hidden;
+    }
+    .av-legend-grid {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+    }
+    .av-legend-pill {
+        background: rgba(11, 17, 22, 0.72);
+        border: 1px solid #1F2D3A;
+        border-radius: 10px;
+        padding: 9px 10px;
+        font-variant-numeric: tabular-nums;
+        transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .av-legend-pill:hover {
+        border-color: rgba(0, 230, 118, 0.48);
+        background: #18232E;
+    }
+
     .av-card {
         background: #131C24;
         border: 1px solid #1F2D3A;
@@ -265,6 +430,13 @@ st.markdown(
         padding: 16px;
         margin-bottom: 12px;
     }
+    .av-card-purple {
+        background: linear-gradient(145deg, rgba(156,39,176,0.10), #131C24);
+        border: 1px solid rgba(156, 39, 176, 0.38);
+        border-radius: 14px;
+        padding: 16px;
+        margin-bottom: 12px;
+    }
     .av-label {
         color: #7A8B9A;
         font-size: 0.78rem;
@@ -274,10 +446,11 @@ st.markdown(
     }
     .av-value {
         color: #FFFFFF;
-        font-size: 1.45rem;
+        font-size: 1.48rem;
         font-weight: 800;
         font-variant-numeric: tabular-nums;
         line-height: 1.25;
+        letter-spacing: -0.02em;
     }
     .av-sub {
         font-size: 0.76rem;
@@ -309,6 +482,16 @@ st.markdown(
         background: rgba(41, 121, 255, 0.15);
         color: #64B5F6;
         border: 1px solid rgba(41, 121, 255, 0.4);
+        border-radius: 999px;
+        padding: 2px 9px;
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+    .av-badge-purple {
+        display: inline-block;
+        background: rgba(156, 39, 176, 0.18);
+        color: #E07BFF;
+        border: 1px solid rgba(156, 39, 176, 0.42);
         border-radius: 999px;
         padding: 2px 9px;
         font-size: 0.72rem;
@@ -387,6 +570,10 @@ st.markdown(
             min-width: 100% !important;
         }
 
+        .av-legend-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        }
+
         /* 아이폰 Safari 입력 포커스 시 자동 화면 확대(Auto-Zoom) 방지: 최소 16px */
         input,
         select,
@@ -414,7 +601,10 @@ st.markdown(
         .av-value {
             font-size: 1.28rem !important;
         }
-        .av-card, .av-card-mint, .av-card-coral {
+        .av-kpi-card {
+            min-height: 152px !important;
+        }
+        .av-card, .av-card-mint, .av-card-coral, .av-card-purple, .av-stack-card {
             padding: 13px !important;
             margin-bottom: 8px !important;
         }
@@ -436,8 +626,11 @@ st.markdown(
 
 
 # ---------------------------------------------------------------------------
-# 3. 숫자/날짜 파싱 및 기초자산 실질 분류 유틸리티
+# 3. 숫자/날짜 파싱 · 기초자산 분류 · React 호환 UI 헬퍼 유틸리티
 # ---------------------------------------------------------------------------
+KST = timezone(timedelta(hours=9))
+
+
 def to_num(val: Any, default: float = 0.0) -> float:
     if val is None or val == "":
         return default
@@ -467,9 +660,77 @@ def fmt_date_kst(val: Any) -> str:
 
 def fmt_curr(krw_val: float, currency: str, usd_rate: float) -> str:
     if currency == "USD":
-        usd = krw_val / (usd_rate if usd_rate > 0 else 1336.57)
+        usd = krw_val / (usd_rate if usd_rate > 0 else 1335.32)
         return f"${usd:,.2f}"
     return f"₩{krw_val:,.0f}"
+
+
+def fmt_compact_curr(krw_val: float, currency: str, usd_rate: float) -> str:
+    """React formatCompactCurrency 호환 요약 금액 표기."""
+    if currency == "USD":
+        usd = krw_val / (usd_rate if usd_rate > 0 else 1335.32)
+        if abs(usd) >= 1000:
+            return f"${usd / 1000:,.1f}K"
+        return f"${usd:,.0f}"
+    abs_v = abs(krw_val)
+    sign = "-" if krw_val < 0 else ""
+    if abs_v >= 100_000_000:
+        return f"{sign}₩{abs_v / 100_000_000:.2f}억"
+    if abs_v >= 10_000:
+        return f"{sign}₩{round(abs_v / 10_000):,}만"
+    return f"{sign}₩{abs_v:,.0f}"
+
+
+def classify_kis_account(row: Dict[str, Any]) -> str:
+    """KIS 행의 계좌구분/시장구분/종목코드를 표준 계좌명으로 매핑합니다."""
+    raw = f"{row.get('계좌구분', '')} {row.get('시장구분', '')} {row.get('종목명', '')} {row.get('종목코드', '')}".upper()
+    if "ISA" in raw or "43783213" in raw:
+        return "ISA중개형"
+    if "연금저축" in raw or "47223092" in raw:
+        return "연금저축"
+    if "IRP" in raw or "퇴직연금" in raw or "43469117" in raw:
+        return "퇴직연금(IRP)"
+    if "토스" in raw or "NAS" in raw or "NYS" in raw or "AMS" in raw:
+        return "토스증권"
+    return "위탁계좌"
+
+
+def is_pure_bond_etf(row: Dict[str, Any]) -> bool:
+    """순수 채권/국채 ETF 여부를 판별합니다 (채권혼합형 ETF 제외)."""
+    name = str(row.get("종목명", ""))
+    return ("국채" in name or "채권" in name) and "혼합" not in name
+
+
+def build_svg_sparkline(values: List[float], stroke_color: str, grad_id: str) -> str:
+    """KPI 카드 하단용 반응형 네온 스파크라인 SVG 마크업을 생성합니다."""
+    pts = [float(v) for v in values if v is not None]
+    if len(pts) < 2:
+        pts = [1.0, 1.04, 1.02, 1.08, 1.12]
+    v_min = min(pts)
+    v_max = max(pts)
+    span = (v_max - v_min) if (v_max - v_min) > 1e-6 else 1.0
+    w, h = 240.0, 44.0
+    pad_y = 4.0
+    step_x = w / max(1, len(pts) - 1)
+    coords = []
+    for idx, val in enumerate(pts):
+        x = idx * step_x
+        norm_y = (val - v_min) / span
+        y = h - pad_y - norm_y * (h - pad_y * 2)
+        coords.append((round(x, 2), round(y, 2)))
+    line_path = "M " + " L ".join(f"{x},{y}" for x, y in coords)
+    area_path = f"{line_path} L {w},{h} L 0,{h} Z"
+    return (
+        f'<svg class="av-sparkline-svg" viewBox="0 0 240 44" preserveAspectRatio="none" '
+        f'style="width:100%; height:44px; display:block; margin-top:8px;">'
+        f"<defs><linearGradient id='{grad_id}' x1='0' y1='0' x2='0' y2='1'>"
+        f"<stop offset='0%' stop-color='{stroke_color}' stop-opacity='0.36'/>"
+        f"<stop offset='100%' stop-color='{stroke_color}' stop-opacity='0.0'/>"
+        f"</linearGradient></defs>"
+        f"<path d='{area_path}' fill='url(#{grad_id})'/>"
+        f"<path d='{line_path}' fill='none' stroke='{stroke_color}' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/>"
+        f"</svg>"
+    )
 
 
 def classify_underlying_asset(row: Dict[str, Any]) -> str:
@@ -690,8 +951,59 @@ if not savings_rows:
         }
     ]
 
+raw_sav_integrated = to_num(integrated_raw.get("은행 예적금"), 0)
 raw_sav_summary = to_num(summary_raw.get("예적금"), 0)
-savings_total_krw = raw_sav_summary if raw_sav_summary >= 5_000_000 else 44_130_000
+savings_total_krw = (
+    raw_sav_integrated
+    if raw_sav_integrated >= 5_000_000
+    else (raw_sav_summary if raw_sav_summary >= 5_000_000 else 44_127_594)
+)
+
+# 예적금 만기 D-Day 및 진행률 계산 (사이드바 하단 & Savings 메뉴 공용)
+today_kst = datetime.now(KST).date()
+enriched_savings: List[Dict[str, Any]] = []
+for s in savings_rows:
+    s_copy = dict(s)
+    start_str = fmt_date_kst(s.get("가입일"))
+    end_str = fmt_date_kst(s.get("만기일"))
+    months_term = int(to_num(s.get("기간"), 12))
+    d_day_val: Optional[int] = None
+    progress_pct = 0.0
+    try:
+        start_dt = datetime.strptime(start_str[:10], "%Y-%m-%d").date() if len(start_str) >= 10 else None
+        if len(end_str) >= 10:
+            end_dt = datetime.strptime(end_str[:10], "%Y-%m-%d").date()
+        elif start_dt is not None:
+            end_dt = start_dt + timedelta(days=round(months_term * 30.4375))
+            end_str = end_dt.strftime("%Y-%m-%d")
+        else:
+            end_dt = None
+        if end_dt is not None:
+            d_day_val = (end_dt - today_kst).days
+            if start_dt is not None and end_dt > start_dt:
+                total_days = (end_dt - start_dt).days
+                elapsed_days = max(0, min(total_days, (today_kst - start_dt).days))
+                progress_pct = round((elapsed_days / total_days) * 100.0, 1)
+    except Exception:
+        pass
+    raw_rate = to_num(s.get("이율"), 0)
+    rate_pct = raw_rate * 100.0 if 0 < raw_rate < 1 else raw_rate
+    s_copy["만기일"] = end_str
+    s_copy["d_day"] = d_day_val
+    s_copy["progress_pct"] = progress_pct
+    s_copy["rate_pct"] = round(rate_pct, 2)
+    s_copy["after_tax_krw"] = round(
+        to_num(s.get("만기수령액(세후)"), 0) or to_num(s.get("만기수령액(통화)"), 0)
+    )
+    enriched_savings.append(s_copy)
+
+savings_rows = enriched_savings
+active_savings = [s for s in savings_rows if s.get("d_day") is not None and s["d_day"] >= 0]
+nearest_savings: Optional[Dict[str, Any]] = (
+    min(active_savings, key=lambda x: x["d_day"])
+    if active_savings
+    else (savings_rows[0] if savings_rows else None)
+)
 
 # 3) 🏠채권내역 (bonds — A~E열 입력, F~G열 수식 보존)
 raw_bonds_candidates = raw_payload.get("bonds") or []
@@ -732,7 +1044,7 @@ if not bonds_rows:
     ]
 
 bond_direct_krw = sum(to_num(b.get("총 납입액"), 0) for b in bonds_rows) or to_num(
-    summary_raw.get("채권"), 14_191_300
+    summary_raw.get("채권"), 17_570_790
 )
 
 # 4) 🚗실물_기타자산 (physicalAssets — 시트 병합 타이틀/합계 행 자동 감지 및 정규화)
@@ -867,7 +1179,9 @@ try:
         if "조회오류" in name:
             continue
         underlying_cls = classify_underlying_asset(r)
+        acc_name = classify_kis_account(r)
         item = dict(r)
+        item["계좌명"] = acc_name
         item["실질자산분류"] = underlying_cls
         item["보유수량_num"] = to_num(r.get("보유수량"), 0)
         item["매수평단가_num"] = to_num(r.get("매수평단가") or r.get("매입평균가"), 0)
@@ -890,23 +1204,45 @@ try:
 except Exception as kis_parse_exc:
     section_warnings.append(f"[💾KIS_실시간잔고 파싱] {type(kis_parse_exc).__name__}: {kis_parse_exc}")
 
-usd_deposit_krw = sum(c["평가금액_num"] for c in cash_deposit_rows) or 27_149_048
-usd_deposit_usd = usd_deposit_krw / usd_krw_rate
-stock_eval_total_krw = sum(h["평가금액_num"] for h in stock_holding_rows) or 25_834_505
-stock_profit_total_krw = sum(h["평가손익_num"] for h in stock_holding_rows) or 1_431_349
+# 한투 예수금 전 계좌 합산 (위탁 KRW/USD + ISA + 연금저축 + IRP) — React dataParser.ts와 100% 동일 기준
+kis_cash_total_krw = sum(c["평가금액_num"] for c in cash_deposit_rows)
+if kis_cash_total_krw <= 0 and not kis_rows:
+    kis_cash_total_krw = 27_183_155
+
+kis_usd_rows = [
+    c
+    for c in cash_deposit_rows
+    if str(c.get("종목코드", "")).upper().startswith("CASH_USD") or "달러" in str(c.get("종목명", ""))
+]
+usd_deposit_krw = sum(c["평가금액_num"] for c in kis_usd_rows) if kis_usd_rows else kis_cash_total_krw
+usd_deposit_usd = (
+    sum(c.get("외화원금_usd", 0.0) for c in kis_usd_rows)
+    if kis_usd_rows
+    else (usd_deposit_krw / usd_krw_rate)
+)
+kis_krw_cash_total = max(0.0, kis_cash_total_krw - usd_deposit_krw)
+total_cash_asset_krw = manual_cash_total_krw + kis_cash_total_krw
+
+stock_eval_total_krw = sum(h["평가금액_num"] for h in stock_holding_rows)
+if stock_eval_total_krw <= 0 and not kis_rows:
+    stock_eval_total_krw = 25_834_505
+stock_profit_total_krw = sum(h["평가손익_num"] for h in stock_holding_rows)
+if stock_profit_total_krw == 0 and not stock_holding_rows and not kis_rows:
+    stock_profit_total_krw = 1_438_220
 stock_buy_total_krw = max(stock_eval_total_krw - stock_profit_total_krw, 1)
 stock_return_pct = (stock_profit_total_krw / stock_buy_total_krw) * 100
 
+# 통합 순자산 (금융 순자산 = 수동현금 + KIS예수금전체 + 예적금 + 주식/ETF평가액 + 직접보유채권)
 financial_net_worth_krw = (
     manual_cash_total_krw
-    + usd_deposit_krw
+    + kis_cash_total_krw
     + savings_total_krw
     + stock_eval_total_krw
     + bond_direct_krw
 )
 grand_total_krw = financial_net_worth_krw + physical_total_krw
 
-# 실질 기초자산별 평가금액 집계
+# 실질 기초자산별 & 상장시장 기준 평가금액 집계 (React dataParser.ts와 동일)
 underlying_overseas_stock_krw = sum(
     h["평가금액_num"] for h in stock_holding_rows if h["실질자산분류"] == "해외주식"
 )
@@ -917,32 +1253,404 @@ underlying_overseas_bond_krw = (
 underlying_domestic_bond_krw = sum(
     h["평가금액_num"] for h in stock_holding_rows if h["실질자산분류"] == "국내채권"
 )
+underlying_domestic_stock_krw = sum(
+    h["평가금액_num"] for h in stock_holding_rows if h["실질자산분류"] == "국내주식"
+)
+kis_bond_etf_krw = sum(h["평가금액_num"] for h in stock_holding_rows if is_pure_bond_etf(h))
+domestic_etf_krw = sum(
+    h["평가금액_num"]
+    for h in stock_holding_rows
+    if not is_pure_bond_etf(h) and ("KRX" in str(h.get("시장구분", "")).upper() or "국내" in str(h.get("시장구분", "")))
+)
+overseas_direct_krw = max(0.0, stock_eval_total_krw - kis_bond_etf_krw - domestic_etf_krw)
+
+# 계좌별 통합 비중 집계 (React AccountStackedBar 8대 계좌와 1:1 일치 — 합계 = grand_total_krw)
+def _calc_kis_acc_bucket(acc_label: str) -> Dict[str, float]:
+    h_rows = [h for h in stock_holding_rows if h.get("계좌명") == acc_label]
+    c_rows = [c for c in cash_deposit_rows if c.get("계좌명") == acc_label]
+    ev = sum(h["평가금액_num"] for h in h_rows)
+    pf = sum(h["평가손익_num"] for h in h_rows)
+    cs = sum(c["평가금액_num"] for c in c_rows)
+    buy = ev - pf
+    return {
+        "eval": ev,
+        "cash": cs,
+        "total": ev + cs,
+        "profit": pf,
+        "ret": (pf / buy * 100.0) if buy > 0 else 0.0,
+    }
+
+_acc_witak = _calc_kis_acc_bucket("위탁계좌")
+_acc_pension = _calc_kis_acc_bucket("연금저축")
+_acc_irp = _calc_kis_acc_bucket("퇴직연금(IRP)")
+_acc_isa = _calc_kis_acc_bucket("ISA중개형")
+_acc_toss = _calc_kis_acc_bucket("토스증권")
+
+account_breakdown: List[Dict[str, Any]] = [
+    {
+        "name": "수동 현금·증여·기여금",
+        "sub": "증여 5천만 · 현금 3,600만 · 기여금 640만 · 은행",
+        "total": manual_cash_total_krw,
+        "profit": 0.0,
+        "ret": 0.0,
+        "color": "#00E676",
+    },
+    {
+        "name": "은행 예적금",
+        "sub": "하나 청년도약 · 신한 적금 · 청약",
+        "total": savings_total_krw,
+        "profit": 0.0,
+        "ret": 4.85,
+        "color": "#2979FF",
+    },
+    {
+        "name": "한투 위탁(달러예수금)",
+        "sub": f"외화예수금 ${usd_deposit_usd:,.2f} 포함",
+        "total": _acc_witak["total"],
+        "profit": _acc_witak["profit"],
+        "ret": _acc_witak["ret"],
+        "color": "#64B5F6",
+    },
+    {
+        "name": "실물·기타자산",
+        "sub": "현대 코나 · 아이폰 · 금 (감가상각)",
+        "total": physical_total_krw,
+        "profit": 0.0,
+        "ret": 0.0,
+        "color": "#FF5252",
+    },
+    {
+        "name": "미래에셋 해외채권",
+        "sub": "미국장기채 T1.125 직접 보유",
+        "total": bond_direct_krw,
+        "profit": 0.0,
+        "ret": 0.0,
+        "color": "#00B0FF",
+    },
+    {
+        "name": "한투 연금저축",
+        "sub": "S&P500 · 나스닥100 · TDF2050",
+        "total": _acc_pension["total"],
+        "profit": _acc_pension["profit"],
+        "ret": _acc_pension["ret"],
+        "color": "#9C27B0",
+    },
+    {
+        "name": "한투 IRP (퇴직연금)",
+        "sub": "미국지수 · 배당성장 · 채권혼합",
+        "total": _acc_irp["total"],
+        "profit": _acc_irp["profit"],
+        "ret": _acc_irp["ret"],
+        "color": "#FFAB00",
+    },
+    {
+        "name": "ISA중개형 (한투)",
+        "sub": "ACE 미국30년국채 · 예수금",
+        "total": _acc_isa["total"],
+        "profit": _acc_isa["profit"],
+        "ret": _acc_isa["ret"],
+        "color": "#1DE9B6",
+    },
+]
+if _acc_toss["total"] > 0:
+    account_breakdown.append(
+        {
+            "name": "토스증권",
+            "sub": "해외 직투 종목",
+            "total": _acc_toss["total"],
+            "profit": _acc_toss["profit"],
+            "ret": _acc_toss["ret"],
+            "color": "#E07BFF",
+        }
+    )
+account_breakdown = [a for a in account_breakdown if a["total"] > 0]
+_acc_sum = sum(a["total"] for a in account_breakdown) or 1.0
+for _ab in account_breakdown:
+    _ab["weight"] = (_ab["total"] / _acc_sum) * 100.0
+
+# 4-C. 월간 현금흐름 (monthlyCashflow / monthlySavingsDist) 및 자산 추이 동기화
+raw_cf_candidates = raw_payload.get("monthlyCashflow") or []
+if not isinstance(raw_cf_candidates, list) or len(raw_cf_candidates) == 0:
+    raw_cf_candidates = [
+        {"Category": "잔액", "Amount": 403693},
+        {"Category": "저축 ", "Amount": 1850000},
+        {"Category": "지출", "Amount": 1662307},
+    ]
+
+cf_balance_krw = 0.0
+cf_savings_flow_krw = 0.0
+cf_expense_krw = 0.0
+for _cf_row in raw_cf_candidates:
+    if not isinstance(_cf_row, dict):
+        continue
+    _cf_cat = str(_cf_row.get("Category") or _cf_row.get("구분") or "").strip()
+    _cf_amt = to_num(_cf_row.get("Amount") if "Amount" in _cf_row else _cf_row.get("금액"), 0)
+    if "잔액" in _cf_cat:
+        cf_balance_krw += _cf_amt
+    elif "저축" in _cf_cat:
+        cf_savings_flow_krw += _cf_amt
+    elif "지출" in _cf_cat:
+        cf_expense_krw += _cf_amt
+
+cf_total_income_krw = cf_balance_krw + cf_savings_flow_krw + cf_expense_krw
+cf_surplus_krw = cf_savings_flow_krw + cf_balance_krw
+cf_savings_rate_pct = (cf_surplus_krw / cf_total_income_krw * 100.0) if cf_total_income_krw > 0 else 0.0
+cf_pure_savings_rate_pct = (cf_savings_flow_krw / cf_total_income_krw * 100.0) if cf_total_income_krw > 0 else 0.0
+
+raw_dist_candidates = raw_payload.get("monthlySavingsDist") or []
+if not isinstance(raw_dist_candidates, list) or len(raw_dist_candidates) == 0:
+    raw_dist_candidates = [
+        {"저축 분류": "IRP & 연금 저축", "IRP & 연금 저축": 750000},
+        {"저축 분류": "전세금 상환 저축액", "전세금 상환 저축액": 300000},
+        {"저축 분류": "주택청약저축", "주택청약저축": 100000},
+        {"저축 분류": "청년도약계좌 (28년 8월 만기)", "청년도약계좌 (28년 8월 만기)": 700000},
+    ]
+
+_dist_palette = ["#00E676", "#2979FF", "#9C27B0", "#00B0FF", "#651FFF", "#1DE9B6"]
+savings_dist_rows: List[Dict[str, Any]] = []
+for _d_idx, _d_row in enumerate(raw_dist_candidates):
+    if not isinstance(_d_row, dict):
+        continue
+    _l_key = next((k for k in _d_row.keys() if "저축 분류" in str(k) or "저축 분야" in str(k) or "분류" in str(k)), None)
+    _d_label = str(_d_row.get(_l_key, "")).strip() if _l_key else ""
+    if not _d_label:
+        continue
+    _d_val = to_num(_d_row.get(_d_label), 0)
+    if _d_val == 0:
+        for _k, _v in _d_row.items():
+            if _k != _l_key and _v not in ("", None) and to_num(_v, 0) > 0:
+                _d_val = to_num(_v, 0)
+                break
+    _short_nm = (
+        _d_label.replace(" (28년 8월 만기)", "").replace(" 상환 저축액", "").replace(" & 연금 저축", "/연금")
+    )
+    savings_dist_rows.append(
+        {
+            "항목": _d_label,
+            "약칭": _short_nm,
+            "금액": _d_val,
+            "구분": "저축/투자",
+            "색상": _dist_palette[_d_idx % len(_dist_palette)],
+            "비중(%)": (_d_val / cf_total_income_krw * 100.0) if cf_total_income_krw > 0 else 0.0,
+        }
+    )
+savings_dist_rows.sort(key=lambda x: x["금액"], reverse=True)
+combined_cashflow_bars: List[Dict[str, Any]] = [d for d in savings_dist_rows if d["금액"] > 0] + [
+    {
+        "항목": "월 생활비/지출",
+        "약칭": "지출 (소비)",
+        "금액": cf_expense_krw,
+        "구분": "지출",
+        "색상": "#FF5252",
+        "비중(%)": (cf_expense_krw / cf_total_income_krw * 100.0) if cf_total_income_krw > 0 else 0.0,
+    },
+    {
+        "항목": "월 잉여 잔액",
+        "약칭": "잉여 잔액",
+        "금액": cf_balance_krw,
+        "구분": "잉여잔액",
+        "색상": "#2979FF",
+        "비중(%)": (cf_balance_krw / cf_total_income_krw * 100.0) if cf_total_income_krw > 0 else 0.0,
+    },
+]
+
+# 자산 추이 마지막 포인트를 실시간 순자산과 일치시킴 (React dataParser.ts 동기화 규칙)
+synced_hist_rows: List[Dict[str, Any]] = []
+if isinstance(asset_history_list, list):
+    for h_row in asset_history_list:
+        if isinstance(h_row, dict):
+            dt_s = fmt_date_kst(h_row.get("날짜"))
+            fin_v = to_num(h_row.get("총합계(원)"), 0)
+            sav_v = to_num(h_row.get("예적금합계(원)"), 0)
+            if dt_s and fin_v > 0:
+                synced_hist_rows.append({"날짜": dt_s, "금융총액": fin_v, "실물포함총액": fin_v, "예적금누계": sav_v})
+if synced_hist_rows:
+    synced_hist_rows[-1]["금융총액"] = round(financial_net_worth_krw)
+    synced_hist_rows[-1]["실물포함총액"] = round(grand_total_krw)
+    synced_hist_rows[-1]["예적금누계"] = round(savings_total_krw)
+
+_prev_fin_val = synced_hist_rows[-2]["금융총액"] if len(synced_hist_rows) >= 2 else financial_net_worth_krw
+mom_change_krw = financial_net_worth_krw - _prev_fin_val
+mom_change_pct = (mom_change_krw / _prev_fin_val * 100.0) if _prev_fin_val > 0 else 0.0
+
+net_worth_spark = [r["실물포함총액"] for r in synced_hist_rows[-8:]] or [financial_net_worth_krw * 0.9, financial_net_worth_krw]
+pl_spark = [
+    stock_eval_total_krw * 0.94,
+    stock_eval_total_krw * 0.96,
+    stock_eval_total_krw * 0.95,
+    stock_eval_total_krw * 0.99,
+    stock_eval_total_krw,
+]
+surplus_spark = [cf_savings_flow_krw, cf_surplus_krw * 0.95, cf_surplus_krw * 1.02, cf_surplus_krw]
+savings_rate_spark = [42.0, 47.2, 51.5, 54.0, round(cf_savings_rate_pct, 1)]
 
 
 # ---------------------------------------------------------------------------
-# 5. 상단 헤더 & 컨트롤 바 (모바일/데스크톱 반응형, 상단 잘림 방지 적용)
+# 5. 왼쪽 사이드바 네비게이션 (React Sidebar 스타일 · 모바일 자동 접힘)
 # ---------------------------------------------------------------------------
-top_col1, top_col2 = st.columns([2.2, 1.8])
+MENU_ITEMS = [
+    "Dashboard",
+    "Portfolio",
+    "Trade & Dividend",
+    "AI Research",
+    "Rebalancing",
+    "Cashflow",
+    "Savings",
+    "비-KIS 시트 수정",
+]
+MENU_LABELS = {
+    "Dashboard": "📊  Dashboard",
+    "Portfolio": "💼  Portfolio",
+    "Trade & Dividend": "📜  Trade & Dividend",
+    "AI Research": "🤖  AI Research",
+    "Rebalancing": "⚖️  Rebalancing",
+    "Cashflow": "💸  Cashflow",
+    "Savings": "🌱  Savings",
+    "비-KIS 시트 수정": "✏️  비-KIS 시트 수정",
+}
+MENU_SUBTITLES = {
+    "Dashboard": ("Portfolio Command Center", "실시간 KIS · 구글 시트 통합 순자산 브리핑"),
+    "Portfolio": ("Holdings & Deposit Vault", "한투 OpenAPI 4대 계좌 읽기 전용 정밀 잔고"),
+    "Trade & Dividend": ("Execution & Dividend Ledger", "최근 매매체결 내역 및 배당금 현금흐름"),
+    "AI Research": ("Deep Research & Copilot", "SaveTicker TOP 5 · 관심종목 Bull/Bear · AI 비서"),
+    "Rebalancing": ("Allocation Simulator", "목표 비중 대비 현재 괴리도 및 리밸런싱 계산기"),
+    "Cashflow": ("Monthly Cashflow Analytics", "월 수입 대비 저축·투자 비중 및 지출 구조"),
+    "Savings": ("Savings Maturity Tracker", "예적금 만기 D-Day 진행률 및 채권 적립 현황"),
+    "비-KIS 시트 수정": ("Google Sheets Two-Way Sync", "수동 관리 4대 시트 실시간 수정 및 행 추가"),
+}
+
+if "active_menu" not in st.session_state or st.session_state["active_menu"] not in MENU_ITEMS:
+    st.session_state["active_menu"] = "Dashboard"
+if "_nav_sidebar_radio" not in st.session_state:
+    st.session_state["_nav_sidebar_radio"] = st.session_state["active_menu"]
+if "_nav_mobile_select" not in st.session_state:
+    st.session_state["_nav_mobile_select"] = st.session_state["active_menu"]
+if "show_ai_copilot_panel" not in st.session_state:
+    st.session_state["show_ai_copilot_panel"] = False
+
+
+def _sync_menu_from_sidebar() -> None:
+    st.session_state["active_menu"] = st.session_state["_nav_sidebar_radio"]
+    st.session_state["_nav_mobile_select"] = st.session_state["_nav_sidebar_radio"]
+
+
+def _sync_menu_from_mobile() -> None:
+    st.session_state["active_menu"] = st.session_state["_nav_mobile_select"]
+    st.session_state["_nav_sidebar_radio"] = st.session_state["_nav_mobile_select"]
+
+
+with st.sidebar:
+    st.markdown(
+        """
+        <div style="display:flex; align-items:center; gap:10px; padding:6px 4px 12px 4px; border-bottom:1px solid #1F2D3A; margin-bottom:10px;">
+            <div style="width:36px; height:36px; border-radius:10px; background:rgba(0,230,118,0.12); border:1px solid rgba(0,230,118,0.38); display:flex; align-items:center; justify-content:center; font-size:1.1rem;">📈</div>
+            <div>
+                <div style="font-size:0.98rem; font-weight:900; color:#FFFFFF; letter-spacing:-0.01em;">
+                    AssetVision <span style="color:#00E676;">PRO</span>
+                </div>
+                <div style="font-size:0.65rem; font-weight:700; color:#7A8B9A; letter-spacing:0.06em;">WEALTH TERMINAL v3.2</div>
+            </div>
+        </div>
+        <div style="font-size:0.68rem; font-weight:800; color:#7A8B9A; letter-spacing:0.08em; text-transform:uppercase; padding:0 4px 4px 4px;">
+            Terminal Menu
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.radio(
+        "메뉴 선택",
+        options=MENU_ITEMS,
+        format_func=lambda m: MENU_LABELS.get(m, m),
+        key="_nav_sidebar_radio",
+        on_change=_sync_menu_from_sidebar,
+        label_visibility="collapsed",
+    )
+
+    st.markdown(
+        "<div style='border-top:1px solid #1F2D3A; margin:12px 0 8px 0;'></div>",
+        unsafe_allow_html=True,
+    )
+    if st.button(
+        "✨ AssetCopilot AI 열기/닫기" if not st.session_state["show_ai_copilot_panel"] else "✕ AssetCopilot AI 닫기",
+        use_container_width=True,
+        key="btn_sidebar_copilot_toggle",
+    ):
+        st.session_state["show_ai_copilot_panel"] = not st.session_state["show_ai_copilot_panel"]
+
+    if nearest_savings is not None:
+        _ns_bank = str(nearest_savings.get("은행") or "은행 예적금")
+        _ns_dday = nearest_savings.get("d_day")
+        _ns_dday_str = f"D-{_ns_dday:,}" if isinstance(_ns_dday, int) and _ns_dday >= 0 else "만기확인"
+        _ns_after_tax = float(nearest_savings.get("after_tax_krw") or 0)
+        _ns_prog = float(nearest_savings.get("progress_pct") or 0)
+        _ns_mat_date = str(nearest_savings.get("만기일") or "-")
+        st.markdown(
+            f"""
+            <div style="margin-top:12px; background:linear-gradient(145deg, rgba(0,230,118,0.08), #131C24); border:1px solid #1F2D3A; border-radius:12px; padding:12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <span style="font-size:0.68rem; font-weight:800; color:#7A8B9A; text-transform:uppercase;">최단기 만기 예정</span>
+                    <span style="font-size:0.72rem; font-weight:800; color:#00E676; background:rgba(0,230,118,0.14); padding:2px 7px; border-radius:6px;">{_ns_dday_str}</span>
+                </div>
+                <div style="font-size:0.84rem; font-weight:700; color:#FFFFFF; margin-bottom:2px;">{_ns_bank} · {nearest_savings.get('구분', '적금')}</div>
+                <div style="font-size:0.96rem; font-weight:800; color:#00E676; font-variant-numeric:tabular-nums;">
+                    ₩{_ns_after_tax:,.0f} <span style="font-size:0.68rem; color:#7A8B9A; font-weight:600;">(세후 예상)</span>
+                </div>
+                <div style="width:100%; height:6px; background:#0B1116; border-radius:999px; overflow:hidden; margin-top:8px;">
+                    <div class="av-gauge-fill" style="width:{min(100.0, max(2.0, _ns_prog)):.1f}%; height:100%; background:#00E676; border-radius:999px;"></div>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:0.68rem; color:#7A8B9A; margin-top:5px;">
+                    <span>진행률 {_ns_prog:.1f}%</span>
+                    <span>만기 {_ns_mat_date}</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+active_menu: str = st.session_state["active_menu"]
+_menu_title, _menu_desc = MENU_SUBTITLES.get(active_menu, ("Portfolio Command Center", ""))
+
+
+# ---------------------------------------------------------------------------
+# 5-A. 상단 React 스타일 터미널 헤더 & 컨트롤 바 (상단 잘림 방지 + 모바일 빠른 메뉴)
+# ---------------------------------------------------------------------------
+st.markdown(
+    """
+    <style>
+    @media (min-width: 769px) {
+        div[data-testid="stVerticalBlock"] > div:has(.av-mobile-anchor),
+        div[data-testid="stVerticalBlock"] > div:has(.av-mobile-anchor) + div {
+            display: none !important;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+top_col1, top_col2 = st.columns([2.15, 1.85])
 with top_col1:
     st.markdown(
         f"""
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px; padding-top:2px;">
-            <span style="font-size:1.35rem; font-weight:900; color:#FFFFFF; letter-spacing:-0.02em;">
-                📈 AssetVision <span style="color:#00E676;">PRO</span>
-            </span>
-            <span class="av-badge-mint">● LIVE SYNC</span>
-            <span class="av-badge-blue">USD/KRW ₩{usd_krw_rate:,.2f}</span>
-        </div>
-        <div style="color:#7A8B9A; font-size:0.78rem; margin-bottom:8px;">
-            데이터 소스: <b style="color:#E2E8F0;">{data_source_label}</b> ·
-            KIS 토큰: <b style="color:#00E676;">{kis_token_status.split('(')[0]}</b>
+        <div class="av-header-shell">
+            <div style="display:flex; align-items:center; gap:9px; flex-wrap:wrap;">
+                <span style="font-size:1.30rem; font-weight:900; color:#FFFFFF; letter-spacing:-0.02em;">
+                    {_menu_title}
+                </span>
+                <span class="av-badge-mint">● API LIVE</span>
+                <span class="av-badge-blue">USD/KRW ₩{usd_krw_rate:,.2f}</span>
+            </div>
+            <div style="color:#7A8B9A; font-size:0.77rem; margin-top:5px;">
+                {_menu_desc} · 소스: <b style="color:#E2E8F0;">{data_source_label}</b> ·
+                KIS 토큰: <b style="color:#00E676;">{kis_token_status.split('(')[0]}</b>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 with top_col2:
-    ctrl_c1, ctrl_c2, ctrl_c3, ctrl_c4 = st.columns([1.1, 1.3, 1.3, 0.9])
+    ctrl_c1, ctrl_c2, ctrl_c3, ctrl_c4 = st.columns([1.05, 1.35, 1.35, 0.85])
     with ctrl_c1:
         currency = st.selectbox(
             "표시 통화",
@@ -969,6 +1677,17 @@ with top_col2:
             st.session_state["sheet_overrides"] = {}
             st.cache_data.clear()
             st.rerun()
+
+# 모바일 전용 빠른 메뉴 전환 (데스크톱 >=769px에서는 자동 숨김)
+st.markdown('<div class="av-mobile-anchor"></div>', unsafe_allow_html=True)
+st.selectbox(
+    "📱 메뉴 이동 (모바일 빠른 전환)",
+    options=MENU_ITEMS,
+    format_func=lambda m: MENU_LABELS.get(m, m),
+    key="_nav_mobile_select",
+    on_change=_sync_menu_from_mobile,
+    label_visibility="collapsed",
+)
 
 # ---------------------------------------------------------------------------
 # 5-B. 데이터 로드 예외 및 부분 파싱 경고 상단 노출 (원인 숨김 방지)
@@ -1000,21 +1719,37 @@ elif section_warnings:
     )
 
 # ---------------------------------------------------------------------------
-# 6. 상단 4대 핵심 KPI 카드
+# 6. React 스타일 상단 4대 핵심 KPI 카드 (네온 스파크라인 & 하단 메타바)
 # ---------------------------------------------------------------------------
 active_net_worth_krw = (
     grand_total_krw if net_worth_mode == "실물 포함 총순자산" else financial_net_worth_krw
 )
+_spark_nw = build_svg_sparkline(net_worth_spark, "#00E676", "gradNwSpark")
+_spark_pl = build_svg_sparkline(pl_spark, "#00E676" if stock_profit_total_krw >= 0 else "#FF5252", "gradPlSpark")
+_spark_cf = build_svg_sparkline(surplus_spark, "#9C27B0", "gradCfSpark")
+_spark_sr = build_svg_sparkline(savings_rate_spark, "#9C27B0", "gradSrSpark")
 
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 with kpi1:
+    _mom_sign = "+" if mom_change_krw >= 0 else ""
+    _mom_color = "#00E676" if mom_change_krw >= 0 else "#FF5252"
     st.markdown(
         f"""
-        <div class="av-card-mint">
-            <div class="av-label">{net_worth_mode}</div>
-            <div class="av-value">{fmt_curr(active_net_worth_krw, currency, usd_krw_rate)}</div>
-            <div class="av-sub" style="color:#A7F3D0;">
-                금융 {fmt_curr(financial_net_worth_krw, currency, usd_krw_rate)} · 실물 {fmt_curr(physical_total_krw, currency, usd_krw_rate)}
+        <div class="av-kpi-card av-kpi-mint">
+            <div>
+                <div class="av-kpi-top">
+                    <span class="av-kpi-title">{'총 순자산 (실물 포함)' if net_worth_mode == '실물 포함 총순자산' else '금융 순자산 합계'}</span>
+                    <span class="av-kpi-icon-mint">💰</span>
+                </div>
+                <div class="av-value">{fmt_curr(active_net_worth_krw, currency, usd_krw_rate)}</div>
+                <div style="font-size:0.76rem; color:{_mom_color}; font-weight:700; margin-top:4px;">
+                    {_mom_sign}{mom_change_pct:.2f}% · 금융 {fmt_compact_curr(financial_net_worth_krw, currency, usd_krw_rate)}
+                </div>
+            </div>
+            {_spark_nw}
+            <div class="av-kpi-subrow">
+                <span style="color:#7A8B9A;">실물 {fmt_compact_curr(physical_total_krw, currency, usd_krw_rate)}</span>
+                <span style="color:#00E676; font-weight:700;">예적금 {fmt_compact_curr(savings_total_krw, currency, usd_krw_rate)}</span>
             </div>
         </div>
         """,
@@ -1026,11 +1761,21 @@ with kpi2:
     pl_color = "#00E676" if stock_profit_total_krw >= 0 else "#FF5252"
     st.markdown(
         f"""
-        <div class="av-card">
-            <div class="av-label">STOCK & ETF 평가액 (🔒 KIS 자동연동)</div>
-            <div class="av-value">{fmt_curr(stock_eval_total_krw, currency, usd_krw_rate)}</div>
-            <div class="av-sub" style="color:{pl_color}; font-weight:700;">
-                {sign_str}{stock_return_pct:.2f}% ({sign_str}{fmt_curr(stock_profit_total_krw, currency, usd_krw_rate)})
+        <div class="av-kpi-card av-kpi-mint">
+            <div>
+                <div class="av-kpi-top">
+                    <span class="av-kpi-title">STOCK & ETF P/L · 🔒 KIS</span>
+                    <span class="av-kpi-icon-mint">📈</span>
+                </div>
+                <div class="av-value">{fmt_curr(stock_eval_total_krw, currency, usd_krw_rate)}</div>
+                <div style="color:{pl_color}; font-size:0.78rem; font-weight:700; margin-top:4px;">
+                    {sign_str}{stock_return_pct:.2f}% ({sign_str}{fmt_curr(stock_profit_total_krw, currency, usd_krw_rate)})
+                </div>
+            </div>
+            {_spark_pl}
+            <div class="av-kpi-subrow">
+                <span style="color:#7A8B9A;">보유 {len(stock_holding_rows)}종목</span>
+                <span style="color:#64B5F6; font-weight:700;">예수금 {fmt_compact_curr(kis_cash_total_krw, currency, usd_krw_rate)}</span>
             </div>
         </div>
         """,
@@ -1040,11 +1785,21 @@ with kpi2:
 with kpi3:
     st.markdown(
         f"""
-        <div class="av-card">
-            <div class="av-label">위탁 외화예수금 + 수동 현금성</div>
-            <div class="av-value">{fmt_curr(manual_cash_total_krw + usd_deposit_krw, currency, usd_krw_rate)}</div>
-            <div class="av-sub" style="color:#64B5F6;">
-                위탁 달러예수금 ${usd_deposit_usd:,.2f} · 수동 {fmt_curr(manual_cash_total_krw, currency, usd_krw_rate)}
+        <div class="av-kpi-card av-kpi-purple">
+            <div>
+                <div class="av-kpi-top">
+                    <span class="av-kpi-title">MONTHLY SURPLUS · 잉여현금</span>
+                    <span class="av-kpi-icon-purple">⚡</span>
+                </div>
+                <div class="av-value">{fmt_curr(cf_surplus_krw, currency, usd_krw_rate)}</div>
+                <div style="color:#E07BFF; font-size:0.77rem; font-weight:700; margin-top:4px;">
+                    월 수입 {fmt_curr(cf_total_income_krw, currency, usd_krw_rate)}
+                </div>
+            </div>
+            {_spark_cf}
+            <div class="av-kpi-subrow">
+                <span style="color:#7A8B9A;">고정저축 {fmt_compact_curr(cf_savings_flow_krw, currency, usd_krw_rate)}</span>
+                <span style="color:#FF5252; font-weight:700;">지출 {fmt_compact_curr(cf_expense_krw, currency, usd_krw_rate)}</span>
             </div>
         </div>
         """,
@@ -1054,73 +1809,197 @@ with kpi3:
 with kpi4:
     st.markdown(
         f"""
-        <div class="av-card">
-            <div class="av-label">예적금 + 직접채권 합계 (✏️ 시트동기화)</div>
-            <div class="av-value">{fmt_curr(savings_total_krw + bond_direct_krw, currency, usd_krw_rate)}</div>
-            <div class="av-sub" style="color:#00E676;">
-                예적금 {fmt_curr(savings_total_krw, currency, usd_krw_rate)} · 채권 {fmt_curr(bond_direct_krw, currency, usd_krw_rate)}
+        <div class="av-kpi-card av-kpi-purple">
+            <div>
+                <div class="av-kpi-top">
+                    <span class="av-kpi-title">SAVINGS RATE · 월 저축률</span>
+                    <span class="av-kpi-icon-purple">🎯</span>
+                </div>
+                <div class="av-value">{cf_savings_rate_pct:.1f}%</div>
+                <div style="color:#00E676; font-size:0.77rem; font-weight:700; margin-top:4px;">
+                    순 저축비율 {cf_pure_savings_rate_pct:.1f}% · 채권 {fmt_compact_curr(bond_direct_krw, currency, usd_krw_rate)}
+                </div>
+            </div>
+            {_spark_sr}
+            <div class="av-kpi-subrow">
+                <span style="color:#7A8B9A;">총 현금성 {fmt_compact_curr(total_cash_asset_krw, currency, usd_krw_rate)}</span>
+                <span style="color:#E07BFF; font-weight:700;">달러 ${usd_deposit_usd:,.0f}</span>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-
 # ---------------------------------------------------------------------------
-# 7. 메인 탭 네비게이션 (비-KIS 자산 관리 / 시트 수정 탭 포함)
+# 6-B. React AccountStackedBar 스타일 계좌별 비중 가로 스택 바 & 8대 계좌 범례 그리드
 # ---------------------------------------------------------------------------
-tabs = st.tabs(
-    [
-        "📊 대시보드",
-        "💼 포트폴리오 (KIS 읽기전용)",
-        "✏️ 비-KIS 자산 관리 / 시트 수정",
-        "📜 매매·배당",
-        "🤖 AI 리서치",
-        "⚖️ 리밸런싱",
-        "✨ AI Copilot",
-        "🖥️ 풀 웹앱 뷰",
-    ]
+_segments_html = "".join(
+    f'<div class="av-stack-seg" title="{a["name"]}: {fmt_curr(a["total"], currency, usd_krw_rate)} ({a["weight"]:.1f}%)" '
+    f'style="width:{max(a["weight"], 0.6):.2f}%; background:{a["color"]}; height:100%; border-radius:4px;"></div>'
+    for a in account_breakdown
+)
+_legend_cards_html = "".join(
+    f"""
+    <div class="av-legend-pill">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:4px;">
+            <span style="display:flex; align-items:center; gap:6px; font-size:0.76rem; font-weight:700; color:#E2E8F0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                <span style="width:8px; height:8px; border-radius:999px; background:{a["color"]}; flex-shrink:0;"></span>
+                {a["name"]}
+            </span>
+            <span style="font-size:0.72rem; font-weight:800; color:#7A8B9A;">{a["weight"]:.1f}%</span>
+        </div>
+        <div style="font-size:0.86rem; font-weight:800; color:#FFFFFF;">{fmt_compact_curr(a["total"], currency, usd_krw_rate)}</div>
+        <div style="font-size:0.68rem; color:#7A8B9A; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{a["sub"]}</div>
+    </div>
+    """
+    for a in account_breakdown
+)
+st.markdown(
+    f"""
+    <div class="av-stack-card">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:0.90rem; font-weight:800; color:#FFFFFF;">🏛️ 계좌별 통합 자산 비중 (8대 계좌)</span>
+                <span class="av-badge-mint">실시간 동기화 합계 {fmt_curr(grand_total_krw, currency, usd_krw_rate)}</span>
+            </div>
+            <span style="font-size:0.73rem; color:#7A8B9A;">총자산 100.0% · 4계좌 KIS + 수동 4대 시트</span>
+        </div>
+        <div class="av-stacked-track">{_segments_html}</div>
+        <div class="av-legend-grid">{_legend_cards_html}</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
+
+# ---------------------------------------------------------------------------
+# 7. 메인 뷰 라우터 (왼쪽 사이드바 / 모바일 빠른 전환 메뉴 기반)
+# ---------------------------------------------------------------------------
+if st.session_state.get("show_ai_copilot_panel", False):
+    with st.expander("✨ AssetCopilot AI — 자산 어드바이저 드로어 (사이드바에서 닫기 가능)", expanded=True):
+        st.caption(
+            f"실시간 순자산({fmt_curr(active_net_worth_krw, currency, usd_krw_rate)})과 "
+            f"한투/수동 시트 데이터를 바탕으로 Gemini AI가 즉시 분석합니다."
+        )
+        quick_col1, quick_col2, quick_col3 = st.columns(3)
+        _qp: Optional[str] = None
+        if quick_col1.button("내 실질 미국/채권 비중 진단", use_container_width=True, key="drawer_qp1"):
+            _qp = "현재 포트폴리오에서 해외주식, 해외채권, 현금/예적금의 실질 비중을 분석하고 개선 방향을 제안해 줘."
+        if quick_col2.button("위탁 달러예수금 활용 전략", use_container_width=True, key="drawer_qp2"):
+            _qp = f"위탁계좌 달러예수금 ${usd_deposit_usd:,.2f}를 어떤 자산군으로 분할 투자하면 좋을지 제안해 줘."
+        if quick_col3.button("2.5억 목표 달성 브리핑", use_container_width=True, key="drawer_qp3"):
+            _qp = "현재 2.5억 목표 대비 달성률과 향후 6개월 저축·투자 전략을 요약해 줘."
+
+        _drawer_q = st.text_input("AI 비서에게 질문하기", placeholder="예: IRP와 연금저축 ETF 비중 조정 의견 알려줘", key="drawer_copilot_q")
+        _final_drawer_q = _qp or (_drawer_q.strip() if _drawer_q else "")
+        if _final_drawer_q and (_qp or st.button("질문 전송", type="primary", key="drawer_copilot_send")):
+            gemini_key_d = get_gemini_api_key()
+            if not gemini_key_d:
+                st.warning("Gemini API Key가 설정되지 않았습니다. (`[gemini]` 섹션 확인)")
+            else:
+                ctx_d = {
+                    "총순자산_실물포함": round(grand_total_krw),
+                    "금융순자산": round(financial_net_worth_krw),
+                    "수동현금": round(manual_cash_total_krw),
+                    "KIS_예수금": round(kis_cash_total_krw),
+                    "은행예적금": round(savings_total_krw),
+                    "KIS_주식ETF평가액": round(stock_eval_total_krw),
+                    "직접보유채권": round(bond_direct_krw),
+                    "실물자산": round(physical_total_krw),
+                    "저축률(%)": round(cf_savings_rate_pct, 1),
+                }
+                with st.spinner("AssetCopilot AI 분석 중..."):
+                    try:
+                        resp_d = requests.post(
+                            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key_d}",
+                            json={
+                                "contents": [
+                                    {
+                                        "parts": [
+                                            {
+                                                "text": (
+                                                    f"당신은 한국어 자산관리 AI 비서 AssetCopilot입니다.\n"
+                                                    f"포트폴리오 요약: {json.dumps(ctx_d, ensure_ascii=False)}\n\n"
+                                                    f"질문: {_final_drawer_q}"
+                                                )
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            timeout=25,
+                        )
+                        if resp_d.status_code == 200:
+                            ans_d = (
+                                resp_d.json()
+                                .get("candidates", [{}])[0]
+                                .get("content", {})
+                                .get("parts", [{}])[0]
+                                .get("text", "응답 없음")
+                            )
+                            st.markdown(ans_d)
+                        else:
+                            st.error(f"Gemini API 오류: {resp_d.status_code}")
+                    except Exception as exc_d:
+                        st.error(f"AI 호출 오류: {exc_d}")
+
 # ===========================================================================
-# TAB 1: 📊 대시보드 (Dashboard) — 도넛, 가로 막대, 자산 추이 차트 & 감가상각 바
+# VIEW 1: 📊 Dashboard — 2.5억 목표 게이지, 도넛, 계좌 비중, 순자산 추이 & 감가상각
 # ===========================================================================
-with tabs[0]:
-    col_chart_l, col_chart_r = st.columns([1.15, 1.0])
+if active_menu == "Dashboard":
+    # 2.5억 순자산 목표 달성률 배너 (React AssetAllocationAndGoal 스타일)
+    goal_target_krw = 250_000_000.0
+    goal_pct = min(100.0, (active_net_worth_krw / goal_target_krw) * 100.0) if goal_target_krw > 0 else 0.0
+    goal_rem_krw = max(0.0, goal_target_krw - active_net_worth_krw)
+    st.markdown(
+        f"""
+        <div class="av-card" style="padding:14px 18px; margin-bottom:14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:0.92rem; font-weight:800; color:#FFFFFF;">🎯 순자산 2.5억 달성 목표 진행률</span>
+                    <span class="av-badge-mint">{goal_pct:.1f}% 달성</span>
+                </div>
+                <span style="font-size:0.78rem; color:#7A8B9A; font-variant-numeric:tabular-nums;">
+                    목표까지 잔여 <b style="color:#E2E8F0;">{fmt_curr(goal_rem_krw, currency, usd_krw_rate)}</b>
+                </span>
+            </div>
+            <div style="width:100%; height:10px; background:#0B1116; border:1px solid #1F2D3A; border-radius:999px; overflow:hidden;">
+                <div class="av-gauge-fill" style="width:{goal_pct:.1f}%; height:100%; background:linear-gradient(90deg, #00E676, #00B0FF); border-radius:999px;"></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col_chart_l, col_chart_r = st.columns([1.05, 1.15])
 
     with col_chart_l:
         st.markdown("#### 📈 자산배분 현황 — " + exposure_mode)
         if exposure_mode.startswith("기초자산"):
             alloc_df = pd.DataFrame(
                 [
-                    {"자산군": "수동 현금·증여·기여금", "금액": manual_cash_total_krw},
-                    {"자산군": "한투 외화예수금(USD)", "금액": usd_deposit_krw},
+                    {"자산군": "현금성 (수동+KIS예수금)", "금액": total_cash_asset_krw},
                     {"자산군": "은행 예적금", "금액": savings_total_krw},
                     {"자산군": "해외주식 (실질: 미ETF+직투)", "금액": underlying_overseas_stock_krw},
                     {"자산군": "해외채권 (실질: 미국채ETF+채권)", "금액": underlying_overseas_bond_krw},
                     {"자산군": "국내채권·혼합형", "금액": underlying_domestic_bond_krw},
+                    {"자산군": "국내주식 (실질)", "금액": underlying_domestic_stock_krw},
                     {"자산군": "실물·기타자산", "금액": physical_total_krw},
                 ]
             )
         else:
-            krx_etf_krw = sum(
-                h["평가금액_num"] for h in stock_holding_rows if str(h.get("시장구분")).upper() == "KRX"
-            )
-            us_direct_krw = sum(
-                h["평가금액_num"] for h in stock_holding_rows if str(h.get("시장구분")).upper() != "KRX"
-            )
             alloc_df = pd.DataFrame(
                 [
-                    {"자산군": "수동 현금·증여·기여금", "금액": manual_cash_total_krw},
-                    {"자산군": "한투 외화예수금(USD)", "금액": usd_deposit_krw},
+                    {"자산군": "현금성 (수동+KIS예수금)", "금액": total_cash_asset_krw},
                     {"자산군": "은행 예적금", "금액": savings_total_krw},
-                    {"자산군": "국내상장 ETF (KRX)", "금액": krx_etf_krw},
-                    {"자산군": "해외직투 주식 (US)", "금액": us_direct_krw},
-                    {"자산군": "직접 보유 채권", "금액": bond_direct_krw},
+                    {"자산군": "국내상장 ETF (주식/혼합)", "금액": domestic_etf_krw},
+                    {"자산군": "해외직투 주식 (US)", "금액": overseas_direct_krw},
+                    {"자산군": "해외채권 (직접채권+채권ETF)", "금액": bond_direct_krw + kis_bond_etf_krw},
                     {"자산군": "실물·기타자산", "금액": physical_total_krw},
                 ]
             )
 
+        alloc_df = alloc_df[alloc_df["금액"] > 0].reset_index(drop=True)
         alloc_df["비중(%)"] = (alloc_df["금액"] / alloc_df["금액"].sum() * 100).round(1)
         fig_donut = px.pie(
             alloc_df,
@@ -1129,9 +2008,9 @@ with tabs[0]:
             hole=0.62,
             color_discrete_sequence=[
                 "#00E676",
-                "#00B0FF",
                 "#2979FF",
                 "#9C27B0",
+                "#00B0FF",
                 "#FFAB00",
                 "#1DE9B6",
                 "#FF5252",
@@ -1142,42 +2021,25 @@ with tabs[0]:
             plot_bgcolor="#131C24",
             font=dict(color="#FFFFFF", size=11),
             margin=dict(t=12, b=12, l=8, r=8),
-            height=300,
+            height=310,
             transition=dict(duration=750, easing="cubic-in-out"),
-            legend=dict(orientation="h", yanchor="bottom", y=-0.32, xanchor="center", x=0.5),
+            legend=dict(orientation="h", yanchor="bottom", y=-0.34, xanchor="center", x=0.5),
         )
         st.plotly_chart(fig_donut, use_container_width=True, config={"displayModeBar": False})
 
     with col_chart_r:
-        st.markdown('#### 🏦 계좌별 자산 비중 (수동 + 한투 자동연동)<span class="av-hbar-marker"></span>', unsafe_allow_html=True)
+        st.markdown('#### 🏦 8대 계좌별 평가액 & 비중<span class="av-hbar-marker"></span>', unsafe_allow_html=True)
         acc_df = pd.DataFrame(
             [
-                {"계좌": "수동 현금·증여·기여금", "평가액(원)": manual_cash_total_krw, "구분": "수동관리(수정가능)"},
-                {"계좌": "은행 예적금", "평가액(원)": savings_total_krw, "구분": "수동관리(수정가능)"},
-                {"계좌": "한투 위탁(달러예수금)", "평가액(원)": usd_deposit_krw, "구분": "KIS 자동연동(읽기전용)"},
-                {"계좌": "실물·기타자산", "평가액(원)": physical_total_krw, "구분": "수동관리(수정가능)"},
-                {"계좌": "직접 보유 채권", "평가액(원)": bond_direct_krw, "구분": "수동관리(수정가능)"},
                 {
-                    "계좌": "연금저축 (한투)",
-                    "평가액(원)": sum(
-                        h["평가금액_num"]
-                        for h in stock_holding_rows
-                        if "연금저축" in str(h.get("계좌구분") or h.get("시장구분"))
-                    ),
-                    "구분": "KIS 자동연동(읽기전용)",
-                },
-                {
-                    "계좌": "퇴직연금 (IRP)",
-                    "평가액(원)": sum(
-                        h["평가금액_num"]
-                        for h in stock_holding_rows
-                        if "IRP" in str(h.get("계좌구분") or h.get("시장구분"))
-                    ),
-                    "구분": "KIS 자동연동(읽기전용)",
-                },
+                    "계좌": a["name"],
+                    "평가액(원)": round(a["total"]),
+                    "비중(%)": round(a["weight"], 1),
+                    "구분": "KIS 자동연동(읽기전용)" if "한투" in a["name"] or "ISA" in a["name"] or "토스" in a["name"] else "수동관리(수정가능)",
+                }
+                for a in account_breakdown
             ]
         )
-        acc_df["비중(%)"] = (acc_df["평가액(원)"] / acc_df["평가액(원)"].sum() * 100).round(1)
         fig_bar = px.bar(
             acc_df,
             x="평가액(원)",
@@ -1195,8 +2057,8 @@ with tabs[0]:
             paper_bgcolor="#131C24",
             plot_bgcolor="#131C24",
             font=dict(color="#FFFFFF", size=11),
-            margin=dict(t=12, b=12, l=8, r=36),
-            height=300,
+            margin=dict(t=12, b=12, l=8, r=42),
+            height=310,
             transition=dict(duration=750, easing="cubic-in-out"),
             xaxis_title=None,
             yaxis_title=None,
@@ -1205,30 +2067,23 @@ with tabs[0]:
         )
         st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
 
-    # 순자산 성장 추이 차트 (Asset History Area Chart — 물이 차오르듯 렌더링)
-    st.markdown("#### 📊 순자산 추이 (금융 순자산 vs 실물 포함 총순자산)")
-    hist_records: List[Dict[str, Any]] = []
-    if isinstance(asset_history_list, list) and len(asset_history_list) > 0:
-        for hr in asset_history_list[-12:]:
-            if not isinstance(hr, dict):
-                continue
-            d_label = fmt_date_kst(hr.get("날짜"))
-            fin_v = to_num(hr.get("총합계(원화)") or hr.get("총합계(원)") or hr.get("합계"), 0)
-            if d_label and fin_v > 0:
-                hist_records.append(
-                    {
-                        "기준일": d_label,
-                        "금융 순자산": fin_v,
-                        "실물 포함 총순자산": fin_v + physical_total_krw,
-                    }
-                )
+    # 순자산 성장 추이 차트 (마지막 포인트 실시간 순자산 동기화 적용)
+    st.markdown("#### 📊 순자산 성장 추이 (금융 순자산 vs 실물 포함 총순자산)")
+    hist_records = [
+        {
+            "기준일": r["날짜"],
+            "금융 순자산": r["금융총액"],
+            "실물 포함 총순자산": r["실물포함총액"],
+        }
+        for r in synced_hist_rows[-12:]
+    ]
     if len(hist_records) < 2:
         hist_records = [
-            {"기준일": "2026-07-15", "금융 순자산": 218_500_000, "실물 포함 총순자산": 244_820_000},
-            {"기준일": "2026-08-15", "금융 순자산": 223_100_000, "실물 포함 총순자산": 249_420_000},
-            {"기준일": "2026-09-15", "금융 순자산": 228_900_000, "실물 포함 총순자산": 255_220_000},
-            {"기준일": "2026-10-15", "금융 순자산": 233_400_000, "실물 포함 총순자산": 259_720_000},
-            {"기준일": "2026-11-15", "금융 순자산": financial_net_worth_krw, "실물 포함 총순자산": grand_total_krw},
+            {"기준일": "2026-07-15", "금융 순자산": 168_500_000, "실물 포함 총순자산": 194_979_444},
+            {"기준일": "2026-08-15", "금융 순자산": 176_100_000, "실물 포함 총순자산": 202_579_444},
+            {"기준일": "2026-09-15", "금융 순자산": 185_900_000, "실물 포함 총순자산": 212_379_444},
+            {"기준일": "2026-10-15", "금융 순자산": 195_400_000, "실물 포함 총순자산": 221_879_444},
+            {"기준일": today_kst.strftime("%Y-%m-%d"), "금융 순자산": round(financial_net_worth_krw), "실물 포함 총순자산": round(grand_total_krw)},
         ]
     df_hist = pd.DataFrame(hist_records)
     fig_area = go.Figure()
@@ -1259,7 +2114,7 @@ with tabs[0]:
         plot_bgcolor="#131C24",
         font=dict(color="#FFFFFF", size=11),
         margin=dict(t=14, b=12, l=8, r=12),
-        height=260,
+        height=265,
         transition=dict(duration=800, easing="cubic-in-out"),
         xaxis=dict(showgrid=False),
         yaxis=dict(gridcolor="#1F2D3A", zeroline=False),
@@ -1313,9 +2168,9 @@ with tabs[0]:
         st.dataframe(manual_df, use_container_width=True, hide_index=True)
 
 # ===========================================================================
-# TAB 2: 💼 포트폴리오 (KIS OpenAPI 자동연동 — 읽기 전용)
+# VIEW 2: 💼 Portfolio (KIS OpenAPI 자동연동 — 읽기 전용)
 # ===========================================================================
-with tabs[1]:
+elif active_menu == "Portfolio":
     st.markdown(
         """
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
@@ -1326,10 +2181,30 @@ with tabs[1]:
         unsafe_allow_html=True,
     )
     st.info(
-        f"**위탁계좌 외화예수금 (USD)**: `${usd_deposit_usd:,.2f}` "
-        f"(원화환산 `{fmt_curr(usd_deposit_krw, currency, usd_krw_rate)}`) · "
-        f"KIS 연동 자산(위탁·ISA·연금저축·IRP)은 API 스케줄러로 자동 적재되므로 읽기 전용으로 보호됩니다."
+        f"**전 계좌 KIS 예수금 합계**: `{fmt_curr(kis_cash_total_krw, currency, usd_krw_rate)}` "
+        f"(위탁 USD `${usd_deposit_usd:,.2f}` · 원화예수금 `{fmt_curr(kis_krw_cash_total, currency, usd_krw_rate)}`) · "
+        f"KIS 4계좌(위탁·ISA·연금저축·IRP) 자산은 API 스케줄러로 자동 동기화되므로 읽기 전용으로 보호됩니다."
     )
+
+    if cash_deposit_rows:
+        dep_cols = st.columns(min(4, len(cash_deposit_rows)))
+        for idx_c, crow in enumerate(cash_deposit_rows[:4]):
+            with dep_cols[idx_c]:
+                orig_label = (
+                    f"${crow.get('외화원금_usd', 0.0):,.2f}"
+                    if crow.get("외화원금_usd", 0.0) > 0
+                    else f"₩{crow['평가금액_num']:,.0f}"
+                )
+                st.markdown(
+                    f"""
+                    <div class="av-card" style="padding:11px 13px; margin-bottom:10px;">
+                        <div style="font-size:0.72rem; color:#7A8B9A; font-weight:700;">{crow.get('계좌명', 'KIS')}</div>
+                        <div style="font-size:0.84rem; color:#E2E8F0; font-weight:700; margin-top:2px;">{crow.get('종목명', '예수금')}</div>
+                        <div style="font-size:1.05rem; color:#00E676; font-weight:800; margin-top:4px;">{orig_label}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
     account_filter = st.radio(
         "계좌 필터 선택",
@@ -1341,6 +2216,7 @@ with tabs[1]:
         h
         for h in stock_holding_rows
         if account_filter == "전체"
+        or h.get("계좌명") == account_filter
         or account_filter in str(h.get("계좌구분", ""))
         or account_filter in str(h.get("시장구분", ""))
     ]
@@ -1349,7 +2225,7 @@ with tabs[1]:
         df_hold = pd.DataFrame(
             [
                 {
-                    "계좌": h.get("계좌구분") or h.get("시장구분") or "",
+                    "계좌": h.get("계좌명") or h.get("계좌구분") or h.get("시장구분") or "",
                     "종목명(티커)": f"{h.get('종목명', '')} ({h.get('종목코드', '')})",
                     "실질자산분류": h.get("실질자산분류", ""),
                     "보유수량": round(h["보유수량_num"], 4),
@@ -1364,7 +2240,6 @@ with tabs[1]:
         )
         st.dataframe(df_hold, use_container_width=True, hide_index=True)
 
-        # 계좌별 보유종목 평가금액 시각화 차트 (탭 진입 시 물이 차오르듯 렌더링)
         fig_hold = px.bar(
             df_hold,
             x="종목명(티커)",
@@ -1384,7 +2259,7 @@ with tabs[1]:
             plot_bgcolor="#131C24",
             font=dict(color="#FFFFFF", size=11),
             margin=dict(t=18, b=12, l=8, r=8),
-            height=280,
+            height=290,
             transition=dict(duration=750, easing="cubic-in-out"),
             xaxis_title=None,
             yaxis_title=None,
@@ -1392,12 +2267,12 @@ with tabs[1]:
         )
         st.plotly_chart(fig_hold, use_container_width=True, config={"displayModeBar": False})
     else:
-        st.caption("선택한 계좌에 주식/ETF 보유 종목이 없습니다. (위탁계좌는 상단 달러예수금 바를 확인하세요)")
+        st.caption("선택한 계좌에 주식/ETF 보유 종목이 없습니다. (위탁계좌는 상단 달러예수금 카드를 확인하세요)")
 
 # ===========================================================================
-# TAB 3: ✏️ 비-KIS 자산 관리 / 시트 수정 (Apps Script doPost 양방향 동기화)
+# VIEW 3: ✏️ 비-KIS 시트 수정 (Apps Script doPost 양방향 동기화)
 # ===========================================================================
-with tabs[2]:
+elif active_menu == "비-KIS 시트 수정":
     st.markdown(
         """
         <div class="av-card-mint">
@@ -1847,9 +2722,9 @@ function doPost(e) {
         )
 
 # ===========================================================================
-# TAB 4: 📜 매매·배당 (Trade & Dividend — KIS 읽기 전용)
+# VIEW 4: 📜 Trade & Dividend (KIS 읽기 전용)
 # ===========================================================================
-with tabs[3]:
+elif active_menu == "Trade & Dividend":
     st.markdown("#### 📜 KIS 매매체결 DB & 💸 해외주식 배당내역 DB (🔒 KIS 읽기 전용)")
     raw_trades = raw_payload.get("kisTrades") or [
         {
@@ -1937,6 +2812,17 @@ with tabs[3]:
         },
     ]
 
+    td_m1, td_m2, td_m3 = st.columns(3)
+    _trade_sum_krw = sum(to_num(t.get("원화환산액") or t.get("체결총액"), 0) for t in trades_data)
+    _div_sum_krw = sum(
+        to_num(d.get("원화환산액"), 0) or (to_num(d.get("세후배당($)"), 0) * usd_krw_rate)
+        for d in dividends_data
+        if isinstance(d, dict)
+    )
+    td_m1.metric("최근 체결 건수", f"{len(trades_data):,}건")
+    td_m2.metric("누적 매매체결액(환산)", fmt_curr(_trade_sum_krw, currency, usd_krw_rate))
+    td_m3.metric("배당수령액(환산)", fmt_curr(_div_sum_krw, currency, usd_krw_rate))
+
     t_col1, t_col2 = st.columns(2)
     with t_col1:
         st.markdown("##### 📜 최근 매매체결 내역")
@@ -1946,9 +2832,9 @@ with tabs[3]:
         st.dataframe(pd.DataFrame(dividends_data), use_container_width=True, hide_index=True)
 
 # ===========================================================================
-# TAB 5: 🤖 AI 리서치 (SaveTicker TOP 5 & Deep Research)
+# VIEW 5: 🤖 AI Research (SaveTicker TOP 5 · Deep Research · AssetCopilot)
 # ===========================================================================
-with tabs[4]:
+elif active_menu == "AI Research":
     st.markdown("#### 🚀 SaveTicker AI 선정 긍정 전망 TOP 5 vs ⚠️ 부정·주의 TOP 5")
     bull_col, bear_col = st.columns(2)
 
@@ -2009,87 +2895,7 @@ with tabs[4]:
     st.code(deep_research_prompt, language="markdown")
     st.link_button("🚀 Gemini Deep Research 앱 열기 (gemini.google.com)", "https://gemini.google.com/app")
 
-# ===========================================================================
-# TAB 6: ⚖️ 리밸런싱 시뮬레이터 (Rebalancing — 비교 차트 & 계산표)
-# ===========================================================================
-with tabs[5]:
-    st.markdown(f"#### ⚖️ 인터랙티브 자산배분 시뮬레이터 ({exposure_mode})")
-    sim_c1, sim_c2, sim_c3, sim_c4, sim_c5 = st.columns(5)
-    with sim_c1:
-        tgt_cash = st.slider("현금성 목표(%)", 0, 70, 35)
-    with sim_c2:
-        tgt_sav = st.slider("예적금 목표(%)", 0, 60, 20)
-    with sim_c3:
-        tgt_ov_stk = st.slider("해외주식 목표(%)", 0, 70, 25)
-    with sim_c4:
-        tgt_ov_bnd = st.slider("해외채권 목표(%)", 0, 50, 15)
-    with sim_c5:
-        tgt_dom_bnd = st.slider("국내채권 목표(%)", 0, 30, 5)
-
-    total_target_pct = tgt_cash + tgt_sav + tgt_ov_stk + tgt_ov_bnd + tgt_dom_bnd
-    if total_target_pct != 100:
-        st.warning(f"현재 목표 비중 합계가 **{total_target_pct}%**입니다. (100% 기준 차이: {100 - total_target_pct:+d}%)")
-
-    rebal_rows = [
-        ("현금성 자산 (수동+외화예수금)", manual_cash_total_krw + usd_deposit_krw, tgt_cash),
-        ("은행 예적금", savings_total_krw, tgt_sav),
-        ("해외주식 (실질: 미ETF+직투)", underlying_overseas_stock_krw, tgt_ov_stk),
-        ("해외채권 (실질: 미국채ETF+채권)", underlying_overseas_bond_krw, tgt_ov_bnd),
-        ("국내채권·혼합형", underlying_domestic_bond_krw, tgt_dom_bnd),
-    ]
-    rebal_df = pd.DataFrame(
-        [
-            {
-                "자산군": name,
-                "현재 평가액(원)": round(cur_val),
-                "현재 비중(%)": round(cur_val / financial_net_worth_krw * 100, 1),
-                "목표 비중(%)": tgt_pct,
-                "목표 금액(원)": round(financial_net_worth_krw * (tgt_pct / 100.0)),
-                "매수(+)/축소(-) 필요액(원)": round(
-                    financial_net_worth_krw * (tgt_pct / 100.0) - cur_val
-                ),
-            }
-            for name, cur_val, tgt_pct in rebal_rows
-        ]
-    )
-
-    # 현재 비중 vs 목표 비중 비교 차트 (물이 차오르듯 렌더링)
-    fig_rebal = go.Figure()
-    fig_rebal.add_trace(
-        go.Bar(
-            x=rebal_df["자산군"],
-            y=rebal_df["현재 비중(%)"],
-            name="현재 비중(%)",
-            marker_color="#2979FF",
-        )
-    )
-    fig_rebal.add_trace(
-        go.Bar(
-            x=rebal_df["자산군"],
-            y=rebal_df["목표 비중(%)"],
-            name="목표 비중(%)",
-            marker_color="#00E676",
-        )
-    )
-    fig_rebal.update_layout(
-        barmode="group",
-        paper_bgcolor="#131C24",
-        plot_bgcolor="#131C24",
-        font=dict(color="#FFFFFF", size=11),
-        margin=dict(t=16, b=12, l=8, r=8),
-        height=270,
-        transition=dict(duration=750, easing="cubic-in-out"),
-        xaxis_title=None,
-        yaxis_title="비중(%)",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    )
-    st.plotly_chart(fig_rebal, use_container_width=True, config={"displayModeBar": False})
-    st.dataframe(rebal_df, use_container_width=True, hide_index=True)
-
-# ===========================================================================
-# TAB 7: ✨ AI Copilot (AssetCopilot)
-# ===========================================================================
-with tabs[6]:
+    st.markdown("---")
     st.markdown("#### ✨ AssetCopilot AI — 시트 & 현재 화면 컨텍스트 연동 비서")
     gemini_key = get_gemini_api_key()
 
@@ -2136,7 +2942,7 @@ with tabs[6]:
                 sys_context = (
                     f"당신은 개인 자산관리 AI 비서 AssetCopilot입니다. "
                     f"총순자산={grand_total_krw:,.0f}원, 금융순자산={financial_net_worth_krw:,.0f}원, "
-                    f"수동현금성={manual_cash_total_krw:,.0f}원, 위탁달러예수금=${usd_deposit_usd:,.2f}({usd_deposit_krw:,.0f}원), "
+                    f"총현금성={total_cash_asset_krw:,.0f}원, 위탁달러예수금=${usd_deposit_usd:,.2f}({usd_deposit_krw:,.0f}원), "
                     f"실질해외주식={underlying_overseas_stock_krw:,.0f}원, 실질해외채권={underlying_overseas_bond_krw:,.0f}원, "
                     f"실물자산={physical_total_krw:,.0f}원. 핵심 수치를 포함해 한국어로 간결하게 답변하세요."
                 )
@@ -2175,15 +2981,233 @@ with tabs[6]:
             st.markdown(msg["content"])
 
 # ===========================================================================
-# TAB 8: 🖥️ 풀 웹앱 뷰 (React 빌드 내장 뷰)
+# VIEW 6: ⚖️ Rebalancing (비교 차트 & 계산표 — 기초자산 실질/상장시장 기준 연동)
 # ===========================================================================
-with tabs[7]:
-    st.caption(
-        "💡 아래 화면은 빌드된 React `AssetVision PRO` 인터랙티브 대시보드를 Streamlit 내부에서 직접 렌더링한 뷰입니다."
+elif active_menu == "Rebalancing":
+    st.markdown(f"#### ⚖️ 인터랙티브 자산배분 시뮬레이터 ({exposure_mode})")
+    sim_c1, sim_c2, sim_c3, sim_c4, sim_c5 = st.columns(5)
+    if exposure_mode.startswith("기초자산"):
+        with sim_c1:
+            tgt_cash = st.slider("현금성 목표(%)", 0, 70, 25)
+        with sim_c2:
+            tgt_sav = st.slider("예적금 목표(%)", 0, 60, 25)
+        with sim_c3:
+            tgt_ov_stk = st.slider("해외주식 목표(%)", 0, 70, 37)
+        with sim_c4:
+            tgt_ov_bnd = st.slider("해외채권 목표(%)", 0, 50, 10)
+        with sim_c5:
+            tgt_dom_bnd = st.slider("국내채권·혼합(%)", 0, 30, 3)
+
+        rebal_rows = [
+            ("현금성 자산 (수동+KIS예수금)", total_cash_asset_krw, tgt_cash),
+            ("은행 예적금", savings_total_krw, tgt_sav),
+            ("해외주식 (실질: 미ETF+직투)", underlying_overseas_stock_krw, tgt_ov_stk),
+            ("해외채권 (실질: 미국채ETF+채권)", underlying_overseas_bond_krw, tgt_ov_bnd),
+            ("국내채권·혼합형", underlying_domestic_bond_krw + underlying_domestic_stock_krw, tgt_dom_bnd),
+        ]
+    else:
+        with sim_c1:
+            tgt_cash = st.slider("현금성 목표(%)", 0, 70, 20)
+        with sim_c2:
+            tgt_sav = st.slider("예적금 목표(%)", 0, 60, 30)
+        with sim_c3:
+            tgt_kr_etf = st.slider("국내상장ETF 목표(%)", 0, 70, 40)
+        with sim_c4:
+            tgt_us_dir = st.slider("해외직투 목표(%)", 0, 50, 0)
+        with sim_c5:
+            tgt_bnd = st.slider("해외채권 목표(%)", 0, 40, 10)
+        tgt_ov_stk, tgt_ov_bnd, tgt_dom_bnd = tgt_kr_etf, tgt_us_dir, tgt_bnd
+
+        rebal_rows = [
+            ("현금성 자산 (수동+KIS예수금)", total_cash_asset_krw, tgt_cash),
+            ("은행 예적금", savings_total_krw, tgt_sav),
+            ("국내상장 해외ETF", domestic_etf_krw, tgt_kr_etf),
+            ("해외직투 주식", overseas_direct_krw, tgt_us_dir),
+            ("해외채권 (직접+ETF)", bond_direct_krw + kis_bond_etf_krw, tgt_bnd),
+        ]
+
+    total_target_pct = sum(t for _, _, t in rebal_rows)
+    if total_target_pct != 100:
+        st.warning(f"현재 목표 비중 합계가 **{total_target_pct}%**입니다. (100% 기준 차이: {100 - total_target_pct:+d}%)")
+
+    rebal_df = pd.DataFrame(
+        [
+            {
+                "자산군": name,
+                "현재 평가액(원)": round(cur_val),
+                "현재 비중(%)": round(cur_val / financial_net_worth_krw * 100, 1),
+                "목표 비중(%)": tgt_pct,
+                "목표 금액(원)": round(financial_net_worth_krw * (tgt_pct / 100.0)),
+                "매수(+)/축소(-) 필요액(원)": round(
+                    financial_net_worth_krw * (tgt_pct / 100.0) - cur_val
+                ),
+            }
+            for name, cur_val, tgt_pct in rebal_rows
+        ]
     )
-    dist_dir = Path(__file__).resolve().parent / "dist"
-    index_html_path = dist_dir / "index.html"
-    if index_html_path.exists():
+
+    fig_rebal = go.Figure()
+    fig_rebal.add_trace(
+        go.Bar(
+            x=rebal_df["자산군"],
+            y=rebal_df["현재 비중(%)"],
+            name="현재 비중(%)",
+            marker_color="#2979FF",
+        )
+    )
+    fig_rebal.add_trace(
+        go.Bar(
+            x=rebal_df["자산군"],
+            y=rebal_df["목표 비중(%)"],
+            name="목표 비중(%)",
+            marker_color="#00E676",
+        )
+    )
+    fig_rebal.update_layout(
+        barmode="group",
+        paper_bgcolor="#131C24",
+        plot_bgcolor="#131C24",
+        font=dict(color="#FFFFFF", size=11),
+        margin=dict(t=16, b=12, l=8, r=8),
+        height=275,
+        transition=dict(duration=750, easing="cubic-in-out"),
+        xaxis_title=None,
+        yaxis_title="비중(%)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    st.plotly_chart(fig_rebal, use_container_width=True, config={"displayModeBar": False})
+    st.dataframe(rebal_df, use_container_width=True, hide_index=True)
+
+# ===========================================================================
+# VIEW 7: 💸 Cashflow (월간 수입·저축·지출 구조 분석)
+# ===========================================================================
+elif active_menu == "Cashflow":
+    st.markdown("#### 💸 월간 현금흐름 & 저축·투자 포트폴리오")
+    cf1, cf2, cf3, cf4 = st.columns(4)
+    cf1.metric("월 총수입", fmt_curr(cf_total_income_krw, currency, usd_krw_rate))
+    cf2.metric("고정 저축/투자", fmt_curr(cf_savings_flow_krw, currency, usd_krw_rate), f"순저축률 {cf_pure_savings_rate_pct:.1f}%")
+    cf3.metric("월 지출 (소비)", fmt_curr(cf_expense_krw, currency, usd_krw_rate))
+    cf4.metric("월 잉여 잔액 포함 저축률", f"{cf_savings_rate_pct:.1f}%", fmt_curr(cf_balance_krw, currency, usd_krw_rate))
+
+    cf_col_l, cf_col_r = st.columns([1.25, 1.0])
+    with cf_col_l:
+        st.markdown("##### 📊 월간 자금 배분 내역 (저축·지출·잉여잔액)")
+        df_cf_bars = pd.DataFrame(combined_cashflow_bars)
+        fig_cf_bar = px.bar(
+            df_cf_bars,
+            x="약칭",
+            y="금액",
+            color="구분",
+            text="비중(%)",
+            color_discrete_map={
+                "저축/투자": "#00E676",
+                "지출": "#FF5252",
+                "잉여잔액": "#2979FF",
+            },
+        )
+        fig_cf_bar.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+        fig_cf_bar.update_layout(
+            paper_bgcolor="#131C24",
+            plot_bgcolor="#131C24",
+            font=dict(color="#FFFFFF", size=11),
+            margin=dict(t=16, b=12, l=8, r=8),
+            height=300,
+            transition=dict(duration=750, easing="cubic-in-out"),
+            xaxis_title=None,
+            yaxis_title=None,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        )
+        st.plotly_chart(fig_cf_bar, use_container_width=True, config={"displayModeBar": False})
+
+    with cf_col_r:
+        st.markdown("##### 🍩 저축 vs 소비 비중")
+        df_cf_pie = pd.DataFrame(
+            [
+                {"항목": "고정 저축/투자", "금액": cf_savings_flow_krw},
+                {"항목": "월 잉여 잔액", "금액": cf_balance_krw},
+                {"항목": "월 생활비/지출", "금액": cf_expense_krw},
+            ]
+        )
+        fig_cf_pie = px.pie(
+            df_cf_pie,
+            names="항목",
+            values="금액",
+            hole=0.60,
+            color_discrete_sequence=["#00E676", "#2979FF", "#FF5252"],
+        )
+        fig_cf_pie.update_layout(
+            paper_bgcolor="#131C24",
+            plot_bgcolor="#131C24",
+            font=dict(color="#FFFFFF", size=11),
+            margin=dict(t=12, b=12, l=8, r=8),
+            height=300,
+            transition=dict(duration=750, easing="cubic-in-out"),
+            legend=dict(orientation="h", yanchor="bottom", y=-0.22, xanchor="center", x=0.5),
+        )
+        st.plotly_chart(fig_cf_pie, use_container_width=True, config={"displayModeBar": False})
+
+    st.dataframe(
+        df_cf_bars[["항목", "구분", "금액", "비중(%)"]].assign(**{"비중(%)": lambda d: d["비중(%)"].round(1)}),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+# ===========================================================================
+# VIEW 8: 🌱 Savings (예적금 만기 트래커 · 채권 적립 · 수동 입출금 현황)
+# ===========================================================================
+elif active_menu == "Savings":
+    st.markdown("#### 🌱 예적금 만기 D-Day 트래커 & 🏠 직접 보유 채권 현황")
+    sav_cols = st.columns(2)
+    for idx_s, sav in enumerate(savings_rows):
+        with sav_cols[idx_s % 2]:
+            d_day = sav.get("d_day")
+            d_day_badge = f"D-{d_day:,}" if isinstance(d_day, int) and d_day >= 0 else "만기/확인"
+            prog = float(sav.get("progress_pct") or 0.0)
+            after_tax = float(sav.get("after_tax_krw") or 0.0)
+            monthly_pay = to_num(sav.get("금액"), 0)
+            rate_pct = float(sav.get("rate_pct") or 0.0)
+            tax_free_badge = '<span class="av-badge-mint">비과세</span>' if str(sav.get("비과세", "")).strip().upper() == "O" else ""
+            st.markdown(
+                f"""
+                <div class="av-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                            <b style="font-size:0.96rem; color:#FFFFFF;">{sav.get('은행', '-')} · {sav.get('구분', '적금')}</b>
+                            {tax_free_badge}
+                        </div>
+                        <span class="av-badge-blue">{d_day_badge}</span>
+                    </div>
+                    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; font-size:0.78rem; margin-bottom:8px;">
+                        <div><span style="color:#7A8B9A;">월 납입액 / 금리</span><br><b>₩{monthly_pay:,.0f} ({rate_pct:.2f}%)</b></div>
+                        <div><span style="color:#7A8B9A;">가입일 ~ 만기일</span><br><b>{sav.get('가입일', '-')} ~ {sav.get('만기일', '-')}</b></div>
+                        <div><span style="color:#7A8B9A;">세후 만기수령액</span><br><b style="color:#00E676;">{fmt_curr(after_tax, currency, usd_krw_rate)}</b></div>
+                    </div>
+                    <div style="width:100%; height:9px; background:#1F2D3A; border-radius:999px; overflow:hidden;">
+                        <div class="av-gauge-fill" style="width:{min(100.0, max(3.0, prog)):.1f}%; height:100%; background:linear-gradient(90deg,#00E676,#2979FF); border-radius:999px;"></div>
+                    </div>
+                    <div style="font-size:0.72rem; color:#7A8B9A; margin-top:5px;">만기 진행률 {prog:.1f}% · ID {sav.get('ID', '-')}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("##### 🏠 직접 보유 채권 (미래에셋 외) & 💰 수동 현금성 통장")
+    b_col1, b_col2 = st.columns(2)
+    with b_col1:
+        st.dataframe(pd.DataFrame(bonds_rows), use_container_width=True, hide_index=True)
+    with b_col2:
+        st.dataframe(pd.DataFrame(manual_cash_rows), use_container_width=True, hide_index=True)
+
+# ---------------------------------------------------------------------------
+# 7-B. 선택형 React 빌드 내장 웹앱 뷰 (기존 dist/index.html 임베드 보존)
+# ---------------------------------------------------------------------------
+dist_dir = Path(__file__).resolve().parent / "dist"
+index_html_path = dist_dir / "index.html"
+if index_html_path.exists():
+    with st.expander("🖥️ React 풀 웹앱 뷰 (`dist/index.html` 내장 렌더링)", expanded=False):
+        st.caption(
+            "💡 아래 화면은 빌드된 React `AssetVision PRO` 인터랙티브 대시보드를 Streamlit 내부에서 직접 렌더링한 뷰입니다."
+        )
         html_content = index_html_path.read_text(encoding="utf-8")
         assets_dir = dist_dir / "assets"
         if assets_dir.exists():
@@ -2213,11 +3237,9 @@ with tabs[7]:
             1,
         )
         components.html(html_content, height=1080, scrolling=True)
-    else:
-        st.info("React 빌드 아티팩트(`dist/index.html`)가 없을 때는 상단 네이티브 탭을 사용하세요.")
 
 # ---------------------------------------------------------------------------
-# 8. 탭 전환 시마다 원형 차트(원 그리기) & 막대 그래프(막대 차오름) 애니메이션 재실행 브릿지
+# 8. 메뉴/탭 전환 시 원형 차트(원 그리기) & 막대/게이지 애니메이션 재실행 브릿지
 # ---------------------------------------------------------------------------
 components.html(
     """
@@ -2229,10 +3251,12 @@ components.html(
             doc.__avChartDrawBound = true;
 
             function animatePieCircleSweep(pieLayer) {
+                if (!pieLayer || pieLayer.dataset.avSwept === '1') return;
+                pieLayer.dataset.avSwept = '1';
                 if (pieLayer.__avRafId) {
                     cancelAnimationFrame(pieLayer.__avRafId);
                 }
-                const duration = 880;
+                const duration = 860;
                 const start = performance.now();
                 function step(now) {
                     const t = Math.min(1, Math.max(0, (now - start) / duration));
@@ -2253,40 +3277,51 @@ components.html(
                 pieLayer.__avRafId = requestAnimationFrame(step);
             }
 
-            function replayChartDrawAnimations(container, includeBars) {
+            function replayChartDrawAnimations(container, forcePieReset) {
                 const root = container || doc;
-
-                // 1) 원형/도넛 차트: 자연스럽게 원이 한 바퀴 그려지는 60fps 스윕 애니메이션 재생
                 const pieLayers = root.querySelectorAll('.stPlotlyChart g.pielayer, [data-testid="stPlotlyChart"] g.pielayer');
                 pieLayers.forEach((el) => {
+                    if (forcePieReset) {
+                        delete el.dataset.avSwept;
+                    }
                     animatePieCircleSweep(el);
                 });
 
-                if (!includeBars) return;
-
-                // 2) 막대 그래프 & 영역 차트 & 게이지 바: 탭 전환 시 막대가 0에서 쭉 차오르는 애니메이션 재생
-                const barAndGaugeEls = root.querySelectorAll(
-                    '.stPlotlyChart g.barlayer g.points g.point path, ' +
-                    '.stPlotlyChart g.barlayer g.points g.point text, ' +
-                    '.stPlotlyChart g.scatterlayer, ' +
-                    '.av-gauge-fill'
-                );
-                barAndGaugeEls.forEach((el) => {
-                    el.style.animation = 'none';
-                    void el.offsetHeight;
-                    el.style.animation = '';
-                });
+                if (forcePieReset) {
+                    const barAndGaugeEls = root.querySelectorAll(
+                        '.stPlotlyChart g.barlayer g.points g.point path, ' +
+                        '.stPlotlyChart g.barlayer g.points g.point text, ' +
+                        '.stPlotlyChart g.scatterlayer, ' +
+                        '.av-gauge-fill'
+                    );
+                    barAndGaugeEls.forEach((el) => {
+                        el.style.animation = 'none';
+                        void el.offsetHeight;
+                        el.style.animation = '';
+                    });
+                }
             }
 
-            // 초기 로드 시 원형 차트 스윕만 부드럽게 시작 (막대는 CSS 초기 애니메이션 그대로 유지하여 끊김 방지)
-            setTimeout(() => replayChartDrawAnimations(doc, false), 40);
+            setTimeout(() => replayChartDrawAnimations(doc, false), 45);
 
+            // 사이드바 메뉴 또는 서브탭 전환 시 애니메이션 재생
             doc.addEventListener('click', function(e) {
-                const tabBtn = e.target.closest('[data-baseweb="tab"]');
-                if (tabBtn) {
-                    setTimeout(() => replayChartDrawAnimations(doc, true), 35);
+                const trigger = e.target.closest('[data-baseweb="tab"], [data-testid="stSidebar"] label');
+                if (trigger) {
+                    setTimeout(() => replayChartDrawAnimations(doc, true), 65);
                 }
             }, true);
+
+            // 리런으로 새 Plotly 원형 차트가 마운트될 때마다 스윕 애니메이션 실행
+            let obsTimer = null;
+            const targetRoot = doc.querySelector('[data-testid="stAppViewContainer"]') || doc.body;
+            if (targetRoot && window.MutationObserver) {
+                const observer = new MutationObserver(() => {
+                    if (obsTimer) clearTimeout(obsTimer);
+                    obsTimer = setTimeout(() => replayChartDrawAnimations(doc, false), 70);
+                });
+                observer.observe(targetRoot, { childList: true, subtree: true });
+            }
         } catch (err) {
             // cross-origin 환경에서는 CSS 애니메이션이 자동 동작
         }

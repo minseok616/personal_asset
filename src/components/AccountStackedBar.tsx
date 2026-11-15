@@ -130,7 +130,7 @@ export const AccountStackedBar: React.FC<AccountStackedBarProps> = ({
       </div>
 
       {/* Bottom Legend Pills */}
-      <div className="mt-3.5 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 text-xs tabular-nums">
+      <div className="mt-3.5 grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2 text-xs tabular-nums">
         {accounts.map((acc) => {
           const isHovered = hoveredAccount === acc.accountName;
           return (

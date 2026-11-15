@@ -1110,20 +1110,41 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
     latestHistory?.exchangeRate ||
     1336.565;
 
-  // 2. Manual Cash Accounts (💰입출금통장: manualCashAccounts or checkingAccounts[0])
-  const rawChecking: any[] = Array.isArray(data.checkingAccounts) ? data.checkingAccounts : [];
-  const checkingAccounts: NormalizedCheckingAccount[] = rawChecking
+  // 2. Manual Cash Accounts (💰입출금통장: checkingAccounts or wide-format manualCashAccounts)
+  const rawCheckingSource: any[] =
+    Array.isArray(data.checkingAccounts) && data.checkingAccounts.length > 0
+      ? data.checkingAccounts
+      : Array.isArray(data.manualCashAccounts) &&
+        data.manualCashAccounts.some(
+          (r: any) =>
+            r &&
+            (r['주거래 하나 통장'] !== undefined ||
+              r['보유 현금'] !== undefined ||
+              r['총합계'] !== undefined)
+        )
+      ? data.manualCashAccounts
+      : [];
+  const checkingAccounts: NormalizedCheckingAccount[] = rawCheckingSource
     .filter((c) => c && (toNum(c['총합계']) > 0 || String(c['날짜'] || '').trim() !== ''))
-    .map((c) => ({
-      date: formatDateKST(c['날짜']),
-      totalKrw: toNum(c['총합계']),
-      hanaBankKrw: toNum(c['주거래 하나 통장'] ?? c['하나은행'] ?? 510640),
-      tossBankKrw: toNum(c['토스뱅크 통장'] ?? c['토스뱅크'] ?? 199900),
-      miraeCmaKrw: toNum(c['미래에셋 종합_CMA'] ?? c['CMA'] ?? 70),
-      heldCashKrw: toNum(c['보유 현금'] ?? c['보유현금'] ?? 36000000),
-      giftMoneyKrw: toNum(c['증여금'] ?? 50000000),
-      youthGovGrantKrw: toNum(c['청년도약계좌 정부기여금'] ?? c['정부기여금'] ?? 6400000),
-    }));
+    .map((c) => {
+      const hana = toNum(c['주거래 하나 통장'] ?? c['하나은행'] ?? 0);
+      const toss = toNum(c['토스뱅크 통장'] ?? c['토스뱅크'] ?? 0);
+      const cma = toNum(c['미래에셋 종합_CMA'] ?? c['CMA'] ?? 0);
+      const cash = toNum(c['보유 현금'] ?? c['보유현금'] ?? 0);
+      const gift = toNum(c['증여금'] ?? 0);
+      const grant = toNum(c['청년도약계좌 정부기여금'] ?? c['정부기여금'] ?? 0);
+      const rowTotal = toNum(c['총합계']) || hana + toss + cma + cash + gift + grant;
+      return {
+        date: formatDateKST(c['날짜']),
+        totalKrw: rowTotal,
+        hanaBankKrw: hana,
+        tossBankKrw: toss,
+        miraeCmaKrw: cma,
+        heldCashKrw: cash,
+        giftMoneyKrw: gift,
+        youthGovGrantKrw: grant,
+      };
+    });
 
   const latestCheck = checkingAccounts[0] || {
     date: '2026.11.14',
@@ -1137,39 +1158,47 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
   };
 
   const rawManualCash: any[] = Array.isArray(data.manualCashAccounts) ? data.manualCashAccounts : [];
+  const hasNormalizedManualItems = rawManualCash.some(
+    (item) =>
+      item &&
+      (item['항목명'] || item['계좌명'] || item['name']) &&
+      toNum(item['금액'] ?? item['잔액'] ?? item['amountKrw'] ?? item['Amount']) > 0
+  );
   let manualCashAccounts: ManualCashAccountItem[] = [];
   let manualCashStatus: DiagnosticModuleStatus['status'] = 'LIVE';
 
-  if (rawManualCash.length > 0) {
+  if (hasNormalizedManualItems) {
     const colors = ['#00E676', '#2979FF', '#9C27B0', '#FFAB00', '#00B0FF', '#1DE9B6'];
     const sumManual = rawManualCash.reduce(
       (s, item) => s + toNum(item['금액'] ?? item['잔액'] ?? item['amountKrw'] ?? item['Amount']),
       0
     );
-    manualCashAccounts = rawManualCash.map((item, idx) => {
-      const amt = toNum(item['금액'] ?? item['잔액'] ?? item['amountKrw'] ?? item['Amount']);
-      const name = String(item['항목명'] ?? item['계좌명'] ?? item['name'] ?? `수동자금 ${idx + 1}`);
-      return {
-        id: `manual-${idx}`,
-        name,
-        institution: String(item['금융사'] ?? item['은행'] ?? item['institution'] ?? '수동입력'),
-        category: name.includes('증여')
-          ? '증여금'
-          : name.includes('기여금')
-          ? '정부기여금'
-          : name.includes('현금')
-          ? '보유현금'
-          : name.includes('CMA')
-          ? 'CMA'
-          : '은행통장',
-        amountKrw: amt,
-        weightOfManualPercent: sumManual > 0 ? (amt / sumManual) * 100 : 0,
-        color: colors[idx % colors.length],
-        badgeText: String(item['구분'] ?? '수동관리'),
-      };
-    });
+    manualCashAccounts = rawManualCash
+      .filter((item) => toNum(item['금액'] ?? item['잔액'] ?? item['amountKrw'] ?? item['Amount']) > 0)
+      .map((item, idx) => {
+        const amt = toNum(item['금액'] ?? item['잔액'] ?? item['amountKrw'] ?? item['Amount']);
+        const name = String(item['항목명'] ?? item['계좌명'] ?? item['name'] ?? `수동자금 ${idx + 1}`);
+        return {
+          id: `manual-${idx}`,
+          name,
+          institution: String(item['금융사'] ?? item['은행'] ?? item['institution'] ?? '수동입력'),
+          category: name.includes('증여')
+            ? '증여금'
+            : name.includes('기여금')
+            ? '정부기여금'
+            : name.includes('현금')
+            ? '보유현금'
+            : name.includes('CMA')
+            ? 'CMA'
+            : '은행통장',
+          amountKrw: amt,
+          weightOfManualPercent: sumManual > 0 ? (amt / sumManual) * 100 : 0,
+          color: colors[idx % colors.length],
+          badgeText: String(item['구분'] ?? '수동관리'),
+        };
+      });
   } else {
-    manualCashStatus = rawChecking.length > 0 ? 'LIVE' : 'FALLBACK';
+    manualCashStatus = rawCheckingSource.length > 0 ? 'LIVE' : 'FALLBACK';
     const rawItems = [
       {
         id: 'mc-gift',
@@ -1789,26 +1818,38 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
   const holdingsBuySum = holdings.reduce((acc, h) => acc + (h.evalAmountKrw - h.profitKrw), 0);
   const totalStockProfitKrw = holdings.reduce((acc, h) => acc + h.profitKrw, 0);
 
-  // 7. Summary & IntegratedSummary (Financial Net Worth vs Total Net Worth with Physical)
+  // 7. Summary & IntegratedSummary (실제 시트·KIS 합산 및 🎯포트폴리오_통합분석 기준 통일)
   const rawSummary = data.summary || {};
+  const integratedRows: any[] = Array.isArray(data.integratedSummary) ? data.integratedSummary : [];
+  const integratedSavingsRow = integratedRows.find(
+    (r) => r && String(r['자산 대분류'] || '').includes('예적금')
+  );
+  const rawSavingsFromIntegrated = toNum(integratedSavingsRow?.['평가금액 (KRW)']);
   const rawSavingsSummary = toNum(rawSummary['예적금']);
   // Guard against #DIV/0! in Google Sheet savings cell dropping 예적금 below 5,000,000 KRW
   const bankSavingsKrw =
-    rawSavingsSummary >= 5000000
+    rawSavingsFromIntegrated >= 5000000
+      ? rawSavingsFromIntegrated
+      : rawSavingsSummary >= 5000000
       ? rawSavingsSummary
       : INITIAL_FALLBACK_RAW.summary.예적금;
-  const cashAssetKrw = Math.max(toNum(rawSummary['현금']), totalCashDepositsKrw);
+
+  const cashAssetKrw = totalCashDepositsKrw > 0 ? totalCashDepositsKrw : toNum(rawSummary['현금']);
+  const directBondsKrw = bonds.reduce((acc, b) => acc + b.totalPaidKrw, 0);
   const totalStockEvalKrw = holdingsEvalSum > 0 ? holdingsEvalSum : toNum(rawSummary['주식']);
   const totalStockBuyKrw = holdingsBuySum > 0 ? holdingsBuySum : totalStockEvalKrw - totalStockProfitKrw;
   const totalStockReturnRate =
     totalStockBuyKrw > 0 ? (totalStockProfitKrw / totalStockBuyKrw) * 100 : 0;
 
+  const isPureBondEtf = (h: NormalizedHoldingItem) =>
+    h.source === 'KIS' && !h.name.includes('혼합') && (h.name.includes('국채') || h.name.includes('채권'));
+
   const kisBondEtfsKrw = holdings
-    .filter((h) => h.source === 'KIS' && (h.name.includes('국채') || h.name.includes('채권')))
+    .filter((h) => isPureBondEtf(h))
     .reduce((acc, h) => acc + h.evalAmountKrw, 0);
 
   const domesticEtfKrw = holdings
-    .filter((h) => h.source === 'KIS' && !h.name.includes('국채') && !h.name.includes('채권'))
+    .filter((h) => h.source === 'KIS' && !isPureBondEtf(h))
     .reduce((acc, h) => acc + h.evalAmountKrw, 0);
 
   const overseasStockKrw = holdings
@@ -1817,16 +1858,14 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
 
   const rawFinTotal = toNum(rawSummary['금융자산합계'] ?? rawSummary['합계']);
   const computedFinTotal =
-    cashAssetKrw + bankSavingsKrw + domesticEtfKrw + overseasStockKrw + kisBondEtfsKrw;
-  const financialTotalKrw = Math.max(rawFinTotal, computedFinTotal);
+    cashAssetKrw + bankSavingsKrw + domesticEtfKrw + overseasStockKrw + kisBondEtfsKrw + directBondsKrw;
+  const hasLiveComponents = totalCashDepositsKrw > 0 || holdingsEvalSum > 0 || directBondsKrw > 0;
+  const financialTotalKrw = hasLiveComponents ? computedFinTotal : rawFinTotal || computedFinTotal;
 
   const overseasBondKrw =
-    toNum(rawSummary['채권']) > 0
-      ? toNum(rawSummary['채권'])
-      : Math.max(
-          kisBondEtfsKrw,
-          financialTotalKrw - (cashAssetKrw + bankSavingsKrw + domesticEtfKrw + overseasStockKrw)
-        );
+    directBondsKrw + kisBondEtfsKrw > 0
+      ? directBondsKrw + kisBondEtfsKrw
+      : toNum(rawSummary['채권']);
 
   // Underlying Exposure Basis (기초자산 실질 기준)
   const underlyingOverseasStockKrw = holdings
@@ -1845,8 +1884,7 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
     .filter((h) => h.underlyingAssetClass === '해외채권')
     .reduce((acc, h) => acc + h.evalAmountKrw, 0);
 
-  const directUsBondKrw = Math.max(0, overseasBondKrw - kisBondEtfsKrw);
-  const underlyingOverseasBondKrw = underlyingKisOverseasBondKrw + directUsBondKrw;
+  const underlyingOverseasBondKrw = underlyingKisOverseasBondKrw + directBondsKrw;
 
   const grandTotalKrw = financialTotalKrw + physicalAssetsTotalKrw;
 
@@ -1968,6 +2006,18 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
       profitKrw: 0,
       returnRate: 0,
       color: '#FFAB00',
+      isManual: true,
+    },
+    {
+      accountName: '미래에셋 해외채권',
+      category: '미국 30년 국채 T1.125 (직접채권)',
+      evalAmountKrw: directBondsKrw,
+      cashAmountKrw: 0,
+      totalAmountKrw: directBondsKrw,
+      weightPercent: grandTotalKrw > 0 ? (directBondsKrw / grandTotalKrw) * 100 : 0,
+      profitKrw: 0,
+      returnRate: 0,
+      color: '#26C6DA',
       isManual: true,
     },
     {
