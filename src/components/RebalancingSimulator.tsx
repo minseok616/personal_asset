@@ -275,6 +275,7 @@ export const RebalancingSimulator: React.FC<RebalancingSimulatorProps> = ({
           <div className="w-full h-[290px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
+                key={`rebal-chart-${exposureMode}`}
                 data={simulatedRows}
                 margin={{ top: 10, right: 10, left: -12, bottom: 8 }}
                 barGap={6}
@@ -354,7 +355,10 @@ export const RebalancingSimulator: React.FC<RebalancingSimulatorProps> = ({
                   fill="#2979FF"
                   radius={[5, 5, 0, 0]}
                   maxBarSize={28}
-                  isAnimationActive={false}
+                  isAnimationActive={true}
+                  animationBegin={40}
+                  animationDuration={850}
+                  animationEasing="ease-out"
                 />
                 <Bar
                   dataKey="targetWeight"
@@ -362,7 +366,10 @@ export const RebalancingSimulator: React.FC<RebalancingSimulatorProps> = ({
                   fill="#00E676"
                   radius={[5, 5, 0, 0]}
                   maxBarSize={28}
-                  isAnimationActive={false}
+                  isAnimationActive={true}
+                  animationBegin={110}
+                  animationDuration={850}
+                  animationEasing="ease-out"
                 />
               </BarChart>
             </ResponsiveContainer>

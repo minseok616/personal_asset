@@ -33,8 +33,8 @@ export const DEFAULT_API_URL: string =
   (import.meta.env.VITE_PORTFOLIO_API_URL as string | undefined) ||
   '';
 
-export const CACHE_STORAGE_KEY = 'assetvision_portfolio_cache_v3';
-export const CACHE_TIMESTAMP_KEY = 'assetvision_portfolio_cache_ts_v3';
+export const CACHE_STORAGE_KEY = 'assetvision_portfolio_cache_v4';
+export const CACHE_TIMESTAMP_KEY = 'assetvision_portfolio_cache_ts_v4';
 
 export const DEFAULT_PHYSICAL_ASSETS: PhysicalAssetItem[] = [
   {
@@ -139,18 +139,6 @@ export const DEFAULT_KIS_ACTIVITY: KisActivityItem[] = [
     amountKrw: 1320,
     currency: 'KRW',
   },
-  {
-    id: 'act-6',
-    date: '2026.10.28',
-    type: '배당입금',
-    accountName: '토스증권',
-    ticker: 'MSFT',
-    itemName: '마이크로소프트 (MSFT) 분기 배당금 수령',
-    quantity: 5,
-    amountKrw: 5547,
-    amountUsd: 4.15,
-    currency: 'USD',
-  },
 ];
 
 export const DEFAULT_KIS_TRADES: KisTradeItem[] = [
@@ -250,22 +238,6 @@ export const DEFAULT_KIS_TRADES: KisTradeItem[] = [
     amountKrw: 769861,
     note: '단기 스윙 차익실현 및 달러예수금 확보',
   },
-  {
-    id: 'trd-7',
-    executedAt: '2026.09.28 22:45:09',
-    accountCategory: '토스증권',
-    tradeType: '매수',
-    code: 'MSFT',
-    name: '마이크로소프트 (Microsoft Corp)',
-    market: 'NAS',
-    currency: 'USD',
-    quantity: 2,
-    unitPriceOriginal: 428.5,
-    unitPriceKrw: 572718,
-    amountOriginal: 857.0,
-    amountKrw: 1145436,
-    note: 'AI 클라우드 코파일럿 성장 모멘텀 추가 매수',
-  },
 ];
 
 export const DEFAULT_KIS_DIVIDENDS: KisDividendItem[] = [
@@ -298,21 +270,6 @@ export const DEFAULT_KIS_DIVIDENDS: KisDividendItem[] = [
     preTaxKrw: 1320,
     postTaxKrw: 1320,
     taxRatePercent: 0,
-  },
-  {
-    id: 'div-3',
-    recordDate: '2026.10.28',
-    accountCategory: '토스증권',
-    code: 'MSFT',
-    name: '마이크로소프트 (Microsoft Corp)',
-    currency: 'USD',
-    holdingQty: 5,
-    dividendPerShare: 0.83,
-    preTaxUsd: 4.15,
-    postTaxUsd: 3.53,
-    preTaxKrw: 5547,
-    postTaxKrw: 4718,
-    taxRatePercent: 15.0,
   },
   {
     id: 'div-4',
@@ -395,8 +352,8 @@ export const DEFAULT_WATCHLIST_RESEARCH: WatchlistResearchItem[] = [
     targetBuyPrice: 435.0,
     targetGapPercent: -5.41,
     aiSummary:
-      'Azure AI 매출 기여도 확대 및 엔터프라이즈 Copilot 유료 구독 전환 가속. 현재 토스증권 5주 보유 중(평단 $427.10, +7.67%)으로 조정 시 비중 확대 유효.',
-    aiSignal: '추세추종',
+      'Azure AI 매출 기여도 확대 및 엔터프라이즈 Copilot 유료 구독 전환 가속. 현재 미보유 상태이나 $435 지지선 조정 시 위탁 달러예수금 분할 진입 검토 가능.',
+    aiSignal: '분할매수',
   },
   {
     id: 'wl-avgo',
@@ -484,7 +441,7 @@ export const DEFAULT_GEMINI_WEEKLY_REPORTS: GeminiWeeklyReportItem[] = [
     marketMacroSummary:
       '• 미 연준(Fed)의 점진적 금리 인하 기조 속에서 미국 소매판매·고용 지표가 견조하게 유지되며 S&P500 및 나스닥100 지수가 신고가 흐름을 이어갔습니다.\n• 원/달러 환율은 ₩1,336.57 수준에서 안정화되었으며, 미 장기채 금리(30년물)가 4.5% 부근으로 소폭 상승함에 따라 주식형 ETF 강세와 장기국채 ETF의 단기 조정이 교차했습니다.',
     holdingsIssues:
-      '• [연금저축/IRP] KODEX 미국나스닥100(366주, +2.21%)과 TIGER 미국나스닥100(14주, +₩742,785), TIGER 미국배당다우존스(157주, +₩499,060)가 포트폴리오 전체 수익을 견인했습니다.\n• [ISA/IRP 채권] ACE 미국30년국채액티브(H)(-9.13%)는 금리 상승 영향으로 평가손실 구간이나 월배당 재투자를 통한 평단가 인하 효과가 누적되고 있습니다.\n• [해외직투] 토스증권 마이크로소프트(MSFT 5주)는 원화 기준 +₩218,929(+7.67%) 수익을 기록 중입니다.',
+      '• [연금저축/IRP] KODEX 미국나스닥100(366주, +2.21%)과 TIGER 미국나스닥100(14주, +₩742,785), TIGER 미국배당다우존스(157주, +₩499,060)가 포트폴리오 전체 수익을 견인했습니다.\n• [ISA/IRP 채권] ACE 미국30년국채액티브(H)(-9.13%)는 금리 상승 영향으로 평가손실 구간이나 월배당 재투자를 통한 평단가 인하 효과가 누적되고 있습니다.\n• [해외직투] 현재 개별 직투 주식은 미보유(0원) 상태이며 위탁 달러예수금($20,312.48)을 통한 신규 분할 진입을 준비 중입니다.',
     watchlistTopPicks:
       '• 1순위 [AVGO 브로드컴 / GOOGL 알파벳]: 목표매수가 대비 괴리율이 -3% 이내로 근접했으며 AI 인프라 수혜 대비 밸류에이션 매력이 가장 높습니다.\n• 2순위 [TLT / ACE 미국30년국채]: 52주 가격 밴드 하단(35.6%)에 위치해 있어 ISA 비과세 계좌 내 추가 적립 시 기대 손익비가 우수합니다.',
     rebalancingActionPlan:
@@ -518,9 +475,9 @@ export const DEFAULT_GEMINI_WEEKLY_REPORTS: GeminiWeeklyReportItem[] = [
     marketMacroSummary:
       '• 미국 주요 빅테크 기업들의 AI 설비투자(CAPEX) 확대 발표로 단기 차익실현 매물이 출회되며 나스닥 지수가 숨고르기 장세를 보였습니다.\n• 국고채 및 미국 장기채 금리가 일시 반등하며 채권형 자산의 변동성이 확대되었습니다.',
     holdingsIssues:
-      '• [토스증권 MSFT] 클라우드 매출 호조에도 가이던스 경계감으로 단기 등락했으나 매수평단가($427.10) 대비 견조한 수익권(+7%대)을 유지했습니다.\n• [현금/적금] 전체 자산의 60% 이상이 현금·증여금·청년도약계좌에 배치되어 있어 시장 조정에도 전체 순자산 변동폭은 -0.28%로 극히 제한적이었습니다.',
+      '• [절세계좌 ETF] 연금저축·IRP 내 미국 지수 추종 ETF 비중이 안정적 방어력을 발휘하며 실적 발표 시즌 변동성을 견뎠습니다.\n• [현금/적금] 전체 자산의 60% 이상이 현금·증여금·청년도약계좌에 배치되어 있어 시장 조정에도 전체 순자산 변동폭은 -0.28%로 극히 제한적이었습니다.',
     watchlistTopPicks:
-      '• [MSFT 마이크로소프트]: 실적 발표 직후 눌림목은 중장기 매수 기회로 판단됩니다.\n• [379810 KODEX 미국나스닥100]: 연금저축 계좌 내 정기 적립 수량을 15주 → 18주로 소폭 확대하는 전략이 유효합니다.',
+      '• [AVGO / GOOGL]: AI 설비투자 확대 수혜 및 밸류에이션 매력이 높아 중장기 눌림목 분할 매수 후보 1순위입니다.\n• [379810 KODEX 미국나스닥100]: 연금저축 계좌 내 정기 적립 수량을 15주 → 18주로 소폭 확대하는 전략이 유효합니다.',
     rebalancingActionPlan:
       '• 변동성 확대 구간에서 추격 매수를 자제하고, 위탁계좌 달러예수금($20,312.48)은 외화 RP 이자를 수취하며 11월 중순 이후 분할 진입 시점을 노리는 전략을 유지합니다.',
   },
@@ -565,9 +522,9 @@ export const DEFAULT_BULLISH_TOP5: SentimentPickItem[] = [
     weeklyChangePercent: 2.65,
     newsCount: 11,
     rationale:
-      'Azure 클라우드 내 AI 워크로드 비중이 13%p 이상 기여하며 엔터프라이즈 M365 Copilot 유료 시트 전환율이 분기 대비 60% 급증. 토스증권 보유분(+7.67%) 핵심 코어 홀딩 유효.',
-    catalysts: ['Azure AI 성장 가속', 'M365 Copilot 수익화', '토스 직투 보유중'],
-    inPortfolio: true,
+      'Azure 클라우드 내 AI 워크로드 비중이 13%p 이상 기여하며 엔터프라이즈 M365 Copilot 유료 시트 전환율이 분기 대비 60% 급증. 미보유 관심 빅테크 후보군.',
+    catalysts: ['Azure AI 성장 가속', 'M365 Copilot 수익화', '미보유 관심종목'],
+    inPortfolio: false,
   },
   {
     id: 'bull-4',
@@ -810,12 +767,12 @@ export const INITIAL_FALLBACK_RAW = {
   updatedAt: '2026-11-14T12:18:31.735Z',
   usdKrwRate: 1336.565,
   summary: {
-    기준일: '2026-11-13T15:00:00.000Z',
-    금융자산합계: 193782151.0399224,
-    현금: 120319053.8312,
-    예적금: 44127593.84772239,
-    주식: 29335503.361,
-    채권: 0,
+    기준일: '2026-11-15T00:00:00.000Z',
+    금융자산합계: 207826654,
+    현금: 120293765,
+    예적금: 44127594,
+    주식: 25834505,
+    채권: 17570790,
   },
   assetHistory: [
     { 날짜: '2024-11-23T15:00:00.000Z', 환율: 1403.51, '총합계(원)': 19104750.03, '예적금합계(원)': 16318012.01, '입출금합계(원)': '', '채권합계(원)': 0, '주식계좌합계(원)': 2786738.03 },
@@ -863,26 +820,7 @@ export const INITIAL_FALLBACK_RAW = {
     { 기준시각: '2026-11-14T11:49:14.000Z', 시장구분: '[퇴직연금(IRP)] 국내', 종목코드: 476750, 종목명: 'ACE 미국30년국채엔화노출액티브(H)', 보유수량: 27, 매입평균가: 8568.3333, 현재가: 6895, 평가금액: 186165, 평가손익: -45180, '수익률(%)': 0, 예수금: 0 },
     { 기준시각: '2026-11-14T11:49:14.000Z', 시장구분: '[퇴직연금(IRP)] 예수금', 종목코드: 'CASH_IRP', 종목명: '퇴직연금(IRP) 예수금', 보유수량: 1, 매입평균가: 0, 현재가: 0, 평가금액: 0, 평가손익: 0, '수익률(%)': 0, 예수금: 0 },
   ],
-  stockDetail: [
-    {
-      '종목정보 시장': 'NAS',
-      종목명: '마이크로소프트',
-      섹터: 'Technology',
-      코드: 'MSFT',
-      '매수정보 보유량': 5,
-      매수평단가: 427.1,
-      '매수총액($)': 2135.5,
-      '매수평단가(원)': 570846.9115,
-      '매수총액(원)': 2854234.5575,
-      '1336.565 평균환율': 1377.36,
-      '잔고 현재가': 1336.565,
-      평가총액: '$',
-      '평가총액(원)': 3073163.9045,
-      '수익현황 총수익': '$',
-      원화수익: 218929.347,
-      일간수익: 0.88,
-    },
-  ],
+  stockDetail: [] as any[],
   savings: [
     {
       구분: '적금',
@@ -1305,22 +1243,54 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
   if (rawPhysical.length > 0) {
     const colors = ['#00E676', '#2979FF', '#FFAB00', '#9C27B0'];
     physicalAssets = rawPhysical
-      .filter((p) => p && (p['자산명'] || p['품목'] || p['name']))
+      .filter((p) => {
+        if (!p) return false;
+        const catStr = String(p['자산구분'] ?? p['카테고리'] ?? '').trim();
+        const nameStr = String(p['자산명'] ?? p['품목'] ?? p['name'] ?? '').trim();
+        if (!nameStr) return false;
+        if (catStr === '합계' || nameStr.includes('실물자산 총')) return false;
+        return true;
+      })
       .map((p, idx) => {
         const name = String(p['자산명'] ?? p['품목'] ?? p['name'] ?? '').trim();
-        const isCar = name.includes('코나') || name.includes('차');
-        const isPhone = name.includes('아이폰') || name.includes('프로');
-        const isGold = name.includes('금') || name.includes('반지');
-        const defaultPurchase = isCar ? 28500000 : isPhone ? 2150000 : isGold ? 750000 : 1000000;
-        const val = toNum(p['현재가치'] ?? p['평가금액'] ?? p['금액'] ?? p['currentValueKrw']);
+        const catRaw = String(p['자산구분'] ?? p['카테고리'] ?? '').trim();
+        const isCar = catRaw.includes('자동차') || name.includes('코나') || name.includes('차');
+        const isPhone = catRaw.includes('전자') || name.includes('아이폰') || name.includes('프로');
+        const isGold = catRaw.includes('귀금속') || name.includes('금') || name.includes('반지');
+        const defaultPurchase = isCar ? 28000000 : isPhone ? 1550000 : isGold ? 300000 : 1000000;
+        const val = toNum(
+          p['현재평가액(원)'] ??
+            p['현재가치'] ??
+            p['현재잔존가치(원)'] ??
+            p['평가금액'] ??
+            p['금액'] ??
+            p['currentValueKrw']
+        );
         const purchase =
-          toNum(p['취득원가'] ?? p['매입가'] ?? p['취득가'] ?? p['purchasePriceKrw']) ||
-          defaultPurchase;
+          toNum(
+            p['취득원가(원)'] ??
+              p['취득원가'] ??
+              p['매입가'] ??
+              p['취득가'] ??
+              p['purchasePriceKrw']
+          ) || defaultPurchase;
+        const years = toNum(p['내용연수(년)']);
+        const rawResPct = toNum(p['잔존가치율']);
+        const derivedRate =
+          years > 0
+            ? ((1 - (rawResPct > 1 ? rawResPct / 100 : rawResPct)) / years) * 100
+            : isCar
+            ? 18
+            : isPhone
+            ? 33
+            : 0;
         const annualDepRate =
           toNum(p['연감가율(%)'] ?? p['감가율'] ?? p['annualDepreciationRatePercent']) ||
-          (isCar ? 15 : isPhone ? 30 : 0);
+          Math.round(derivedRate);
         const accumDep =
-          toNum(p['감가상각누계액'] ?? p['accumulatedDepreciationKrw']) || purchase - val;
+          p['감가상각누계액(원)'] !== undefined || p['감가상각누계액'] !== undefined
+            ? toNum(p['감가상각누계액(원)'] ?? p['감가상각누계액'])
+            : purchase - val;
         const residualRatio =
           purchase > 0 ? Math.min(100, Math.max(0, (val / purchase) * 100)) : 100;
         const depRatio = Math.max(0, 100 - residualRatio);
@@ -1341,13 +1311,12 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
           annualDepreciationRatePercent: annualDepRate,
           residualValueRatioPercent: residualRatio,
           depreciationRatioPercent: depRatio,
-          acquisitionDate: String(
-            p['취득일'] ?? p['구입일'] ?? (isCar ? '2025.03' : isPhone ? '2025.10' : '2024.05')
-          ),
+          acquisitionDate: formatDateKST(p['취득일'] ?? p['구입일']) || '2025.03',
           note: String(
-            p['비고'] ??
+            p['비고 및 감가상각 설명'] ??
+              p['비고'] ??
               p['설명'] ??
-              (annualDepRate > 0 ? `연 ${annualDepRate}% 정률 감가상각 반영` : '실물 시세 반영')
+              (annualDepRate > 0 ? `연 ${annualDepRate}% 감가상각 반영` : '실물 시세 반영')
           ),
           color: colors[idx % colors.length],
         };
@@ -1415,13 +1384,24 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
             : 'KRW';
         const qty = toNum(t['체결수량'] ?? t['수량'] ?? t['quantity']) || 1;
         const unitOrig = toNum(t['체결단가'] ?? t['단가'] ?? t['unitPriceOriginal'] ?? t['unitPrice']);
-        const amtOrig = toNum(t['체결금액'] ?? t['금액'] ?? t['amountOriginal']) || qty * unitOrig;
+        const amtOrig =
+          toNum(t['체결총액'] ?? t['체결금액'] ?? t['금액'] ?? t['amountOriginal']) ||
+          qty * unitOrig;
         const unitKrw = cur === 'USD' ? unitOrig * usdKrwRate : unitOrig;
-        const amtKrw = toNum(t['원화환산액'] ?? t['amountKrw']) || (cur === 'USD' ? amtOrig * usdKrwRate : amtOrig);
+        const amtKrw =
+          toNum(t['원화환산액'] ?? t['amountKrw']) || (cur === 'USD' ? amtOrig * usdKrwRate : amtOrig);
+
+        const rawExec = String(
+          t['체결일시'] ?? t['일자'] ?? t['날짜'] ?? t['executedAt'] ?? formatDateKST(new Date())
+        ).trim();
+        const formattedExec = rawExec.replace(
+          /^(\d{4})(\d{2})(\d{2})\s+(\d{2})(\d{2})(\d{2})$/,
+          '$1.$2.$3 $4:$5:$6'
+        );
 
         return {
-          id: String(t['id'] ?? `kis-trd-${idx}`),
-          executedAt: String(t['체결일시'] ?? t['일자'] ?? t['날짜'] ?? t['executedAt'] ?? formatDateKST(new Date())),
+          id: String(t['주문번호'] ?? t['id'] ?? `kis-trd-${idx}`),
+          executedAt: formattedExec,
           accountCategory: accCat,
           tradeType,
           code: String(t['종목코드'] ?? t['티커'] ?? t['code'] ?? '-').trim(),
@@ -2013,31 +1993,37 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
       color: '#1DE9B6',
     },
     {
-      accountName: '토스 · ISA 계좌',
-      category: 'MSFT 직투 & ISA 국채ETF',
+      accountName: 'ISA중개형 (한투)',
+      category: 'ISA 미국30년국채 ETF',
       evalAmountKrw: tossStats.evalAmt + isaStats.evalAmt,
       cashAmountKrw: tossStats.cashAmt + isaStats.cashAmt,
       totalAmountKrw: tossStats.totalAmt + isaStats.totalAmt,
       weightPercent:
         grandTotalKrw > 0 ? ((tossStats.totalAmt + isaStats.totalAmt) / grandTotalKrw) * 100 : 0,
       profitKrw: tossStats.profitAmt + isaStats.profitAmt,
-      returnRate: tossStats.ret,
+      returnRate: isaStats.ret || tossStats.ret,
       color: '#FF5252',
     },
   ].filter((a) => a.totalAmountKrw > 0);
 
   // 9. Rebalancing Plan (5 Financial Asset Classes based on Financial Net Worth)
   const rawRebal: any[] = Array.isArray(data.rebalancingPlan) ? data.rebalancingPlan : [];
+  const validRawRebal = rawRebal.filter(
+    (r) =>
+      r &&
+      (r['자산군'] || r['assetClass']) &&
+      !String(r['자산군'] ?? r['assetClass']).includes('총합계')
+  );
   let rebalancingPlan: RebalancingItem[] = [];
 
-  if (rawRebal.length > 0) {
+  if (validRawRebal.length > 0) {
     const colors = ['#2979FF', '#00E676', '#9C27B0', '#FFAB00', '#00B0FF'];
-    rebalancingPlan = rawRebal.map((r, i) => {
+    rebalancingPlan = validRawRebal.map((r, i) => {
       const curAmt = toNum(r['현재금액'] ?? r['currentAmount'] ?? r['평가금액']);
       const curWeight =
         toNum(r['현재비중'] ?? r['currentWeight']) ||
         (financialTotalKrw > 0 ? (curAmt / financialTotalKrw) * 100 : 0);
-      const targetWeight = toNum(r['목표비중'] ?? r['targetWeight']) || 20;
+      const targetWeight = toNum(r['목표비중'] ?? r['targetWeight']);
       return {
         id: `rebal-${i}`,
         assetClass: String(r['자산군'] ?? r['assetClass'] ?? `자산군 ${i + 1}`),
@@ -2056,7 +2042,7 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
         description: '보유현금 3.6천만 · 증여 5천만 · 기여금 640만 · 달러예수금 $20,312.48',
         currentAmountKrw: cashAssetKrw,
         currentWeightPercent: financialTotalKrw > 0 ? (cashAssetKrw / financialTotalKrw) * 100 : 0,
-        targetWeightPercent: 30,
+        targetWeightPercent: 20,
         color: '#2979FF',
       },
       {
@@ -2065,7 +2051,7 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
         description: '하나 청년도약계좌 · 신한 적금 · 전세반환 저축',
         currentAmountKrw: bankSavingsKrw,
         currentWeightPercent: financialTotalKrw > 0 ? (bankSavingsKrw / financialTotalKrw) * 100 : 0,
-        targetWeightPercent: 25,
+        targetWeightPercent: 30,
         color: '#00E676',
       },
       {
@@ -2074,16 +2060,16 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
         description: '연금저축 · IRP · ISA 미국 S&P500 / 나스닥100 / 배당 / TDF',
         currentAmountKrw: domesticEtfKrw,
         currentWeightPercent: financialTotalKrw > 0 ? (domesticEtfKrw / financialTotalKrw) * 100 : 0,
-        targetWeightPercent: 25,
+        targetWeightPercent: 40,
         color: '#9C27B0',
       },
       {
         id: 'rebal-us-stock',
         assetClass: '해외직투 주식',
-        description: '토스증권 미국 개별주 (마이크로소프트 MSFT)',
+        description: '미보유 (직투 없음)',
         currentAmountKrw: overseasStockKrw,
         currentWeightPercent: financialTotalKrw > 0 ? (overseasStockKrw / financialTotalKrw) * 100 : 0,
-        targetWeightPercent: 12,
+        targetWeightPercent: 0,
         color: '#FFAB00',
       },
       {
@@ -2092,7 +2078,7 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
         description: '미국 30년 국채 액티브 ETF (ISA · IRP) 및 미국장기채',
         currentAmountKrw: overseasBondKrw,
         currentWeightPercent: financialTotalKrw > 0 ? (overseasBondKrw / financialTotalKrw) * 100 : 0,
-        targetWeightPercent: 8,
+        targetWeightPercent: 10,
         color: '#00B0FF',
       },
     ];
@@ -2106,7 +2092,7 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
       description: '보유현금 3.6천만 · 증여 5천만 · 기여금 640만 · 달러예수금 $20,312.48',
       currentAmountKrw: cashAssetKrw,
       currentWeightPercent: financialTotalKrw > 0 ? (cashAssetKrw / financialTotalKrw) * 100 : 0,
-      targetWeightPercent: 28,
+      targetWeightPercent: 25,
       color: '#2979FF',
     },
     {
@@ -2115,18 +2101,18 @@ export function parsePortfolioResponse(raw: any, isLiveApi = true): PortfolioDat
       description: '하나 청년도약계좌(연 4.5% 비과세) · 신한 적금 · 전세반환 저축',
       currentAmountKrw: bankSavingsKrw,
       currentWeightPercent: financialTotalKrw > 0 ? (bankSavingsKrw / financialTotalKrw) * 100 : 0,
-      targetWeightPercent: 24,
+      targetWeightPercent: 25,
       color: '#00E676',
     },
     {
       id: 'rebal-und-overseas-stock',
       assetClass: '해외주식 (실질 합산)',
       description:
-        '연금·IRP 미국지수/배당 ETF(KODEX/TIGER 나스닥100·S&P500·배당다우) + 토스 직투(MSFT)',
+        '연금·IRP 미국지수/배당 ETF(KODEX/TIGER 나스닥100·S&P500·배당다우)',
       currentAmountKrw: underlyingOverseasStockKrw,
       currentWeightPercent:
         financialTotalKrw > 0 ? (underlyingOverseasStockKrw / financialTotalKrw) * 100 : 0,
-      targetWeightPercent: 35,
+      targetWeightPercent: 37,
       color: '#9C27B0',
     },
     {

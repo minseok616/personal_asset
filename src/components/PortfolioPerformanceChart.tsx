@@ -132,6 +132,7 @@ export const PortfolioPerformanceChart: React.FC<PortfolioPerformanceChartProps>
       <div className="w-full h-[340px] sm:h-[380px]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
+            key={`perf-area-${period}-${showSubSeries}`}
             data={filteredData}
             margin={{ top: 10, right: 12, left: 4, bottom: 0 }}
           >
@@ -245,6 +246,10 @@ export const PortfolioPerformanceChart: React.FC<PortfolioPerformanceChartProps>
                 strokeWidth={1.75}
                 strokeDasharray="4 4"
                 fill="url(#savingsBlueGrad)"
+                isAnimationActive={true}
+                animationBegin={40}
+                animationDuration={850}
+                animationEasing="ease-out"
                 activeDot={{ r: 4, fill: '#2979FF', stroke: '#0B1116', strokeWidth: 2 }}
               />
             )}
@@ -257,6 +262,10 @@ export const PortfolioPerformanceChart: React.FC<PortfolioPerformanceChartProps>
                 stroke="#9C27B0"
                 strokeWidth={1.75}
                 fill="url(#stockPurpleGrad)"
+                isAnimationActive={true}
+                animationBegin={80}
+                animationDuration={900}
+                animationEasing="ease-out"
                 activeDot={{ r: 4, fill: '#9C27B0', stroke: '#0B1116', strokeWidth: 2 }}
               />
             )}
@@ -268,6 +277,10 @@ export const PortfolioPerformanceChart: React.FC<PortfolioPerformanceChartProps>
               stroke="#00E676"
               strokeWidth={3}
               fill="url(#totalNeonMintGrad)"
+              isAnimationActive={true}
+              animationBegin={30}
+              animationDuration={950}
+              animationEasing="ease-out"
               activeDot={{
                 r: 6,
                 fill: '#00E676',

@@ -163,10 +163,10 @@ export const AssetCopilotDrawer: React.FC<AssetCopilotDrawerProps> = ({
      * 순금 반지: 취득원가 ₩750,000 / 현재추정가치 ₩920,000 (+22.7% 시세 상승)
 
 2. 실질 기초자산(Underlying Exposure) vs 상장시장 기준 비교:
-   - [실질 기준] 해외주식 합계: ₩${Math.round(s.underlyingOverseasStockKrw).toLocaleString('ko-KR')} (연금저축·IRP 내 KODEX/TIGER 미국나스닥100·S&P500·배당다우존스·TDF ETF + 토스증권 MSFT 직투 합산, 전체 투자자산 내 ${overseasStockShareOfInv.toFixed(1)}%)
+   - [실질 기준] 해외주식 합계: ₩${Math.round(s.underlyingOverseasStockKrw).toLocaleString('ko-KR')} (연금저축·IRP 내 KODEX/TIGER 미국나스닥100·S&P500·배당다우존스·TDF ETF 합산, 전체 투자자산 내 ${overseasStockShareOfInv.toFixed(1)}%)
    - [실질 기준] 해외채권 합계: ₩${Math.round(s.underlyingOverseasBondKrw).toLocaleString('ko-KR')} (ISA·IRP ACE 미국30년국채액티브 + 미래에셋 미국장기채 T1.125)
    - [실질 기준] 국내채권·혼합형 합계: ₩${Math.round(s.underlyingDomesticBondKrw + s.underlyingDomesticStockKrw).toLocaleString('ko-KR')} (IRP KODEX 코리아배당성장채권혼합 ₩1,829,520, 실질 국내순수주식 ₩0)
-   - [상장시장 기준] 국내상장 ETF: ₩${Math.round(s.domesticEtfKrw + (s.underlyingOverseasBondKrw - Math.max(0, s.overseasBondKrw - 492405))).toLocaleString('ko-KR')} vs 해외직투(MSFT): ₩${Math.round(s.overseasStockKrw).toLocaleString('ko-KR')}
+   - [상장시장 기준] 국내상장 ETF: ₩${Math.round(s.domesticEtfKrw + (s.underlyingOverseasBondKrw - Math.max(0, s.overseasBondKrw - 492405))).toLocaleString('ko-KR')} vs 해외직투: ₩${Math.round(s.overseasStockKrw).toLocaleString('ko-KR')} (미보유)
 
 3. 보유 종목 상세 (${data.holdings.length}종목, 총 평가액 ₩${Math.round(data.totalStockEvalKrw).toLocaleString('ko-KR')}, 총 손익 ${formatSignedCurrency(data.totalStockProfitKrw, 'KRW', usdKrwRate)}):
 ${data.holdings
@@ -224,7 +224,7 @@ ${data.holdings
 • **수익 상위 효자 종목**:
   1) **[퇴직연금 IRP] TIGER 미국나스닥100**: 평가익 **+₩742,785 (+46.68%)**
   2) **[퇴직연금 IRP] TIGER 미국배당다우존스**: 평가익 **+₩499,060 (+26.44%)**
-  3) **[토스증권] 마이크로소프트 (MSFT)**: 5주 보유, 평가익 **+₩218,929 (+7.67%)**
+  3) **[퇴직연금 IRP] KODEX 코리아배당성장채권혼합**: 평가익 **+₩277,355 (+17.87%)**
   4) **[연금저축] KODEX 미국나스닥100**: 366주 보유, 평가익 **+₩197,460 (+2.21%)**
 • **집중 관리 종목**: **[ISA/IRP] ACE 미국30년국채액티브(H)**는 금리 반등으로 **-9.13%** 구간이나 월분배금 재투자로 평단가를 낮추는 구간입니다.`;
       }
@@ -235,7 +235,7 @@ ${data.holdings
 
 현재 **SaveTicker 1주간 뉴스 감성 분석(긍정 TOP 5 vs 부정 TOP 5)** 및 **${latestRep?.reportWeek}** AI 브리핑 화면을 보고 계십니다.
 
-• **🚀 AI 선정 긍정 전망 TOP 5**: **NVDA (+95점)**, **AVGO (+91점)**, **MSFT (+89점, 보유중)**, **GOOGL (+86점)**, **SCHD (+83점, IRP 보유중)**
+• **🚀 AI 선정 긍정 전망 TOP 5**: **NVDA (+95점)**, **AVGO (+91점)**, **MSFT (+89점)**, **GOOGL (+86점)**, **SCHD (+83점, IRP 보유중)**
 • **⚠️ AI 선정 부정·주의 TOP 5**: **TLT/미국30년국채 (-78점, 보유점검)**, **INTC (-84점)**, **SMCI (-81점)**, **SOXL (-72점)**, **TSLA (-66점)**
 • **관심종목 목표가 근접 픽**: **AVGO(괴리율 -3.11%)**, **GOOGL(-3.42%)**, **SCHD(-2.59%)**, **TLT(-0.97%)**가 적극매수권에 진입했습니다.
 • **활용 팁**: 각 카드의 **[🔬 Deep Research 프롬프트 복사 & Gemini 실행]** 버튼을 누르면 종목별 심층 분석 프롬프트가 복사되고 Gemini 앱이 즉시 열립니다.`;
@@ -256,7 +256,7 @@ ${data.holdings
 
 • **현금성 자산**: **${fmt(s.cashAssetKrw)} (${((s.cashAssetKrw / finTotal) * 100).toFixed(1)}%)** — 보유현금·증여금 및 달러예수금($20,312.48) 포함
 • **은행 예적금**: **${fmt(s.bankSavingsKrw)} (${((s.bankSavingsKrw / finTotal) * 100).toFixed(1)}%)** — 청년도약계좌 등
-• **실질 해외주식**: **${fmt(s.underlyingOverseasStockKrw)} (${((s.underlyingOverseasStockKrw / finTotal) * 100).toFixed(1)}%)** — 연금/IRP 미국ETF + MSFT 직투 합산
+• **실질 해외주식**: **${fmt(s.underlyingOverseasStockKrw)} (${((s.underlyingOverseasStockKrw / finTotal) * 100).toFixed(1)}%)** — 연금/IRP 미국ETF 합산 (해외직투 미보유)
 • **실질 해외채권**: **${fmt(s.underlyingOverseasBondKrw)} (${((s.underlyingOverseasBondKrw / finTotal) * 100).toFixed(1)}%)** — 미국30년국채 ETF + T1.125`;
       }
 
@@ -289,12 +289,12 @@ ${data.holdings
 상장 거래소(KRX) 기준으로는 연금저축·IRP·ISA의 ETF가 '국내 상장'으로 보이지만, **실제 투자되는 기초자산(Underlying Asset)** 기준으로 재분류하면 포트폴리오의 **글로벌 달러·미국 자산 집중도**가 명확히 드러납니다.
 
 #### 1. 상장시장 기준 vs 기초자산 실질 기준 비교
-• **[상장시장 기준]** 국내상장 ETF **${fmt(s.domesticEtfKrw)}** vs 미국 직투(MSFT) **${fmt(s.overseasStockKrw)}**
+• **[상장시장 기준]** 국내상장 ETF **${fmt(s.domesticEtfKrw)}** vs 미국 직투 **${fmt(s.overseasStockKrw)}**
 • **[기초자산 실질 기준 (권장)]**:
   1) **실질 해외주식 합계**: **${fmt(s.underlyingOverseasStockKrw)}** (전체 투자자산의 **${usStockPctOfRisk.toFixed(1)}%**, 금융자산의 **${((s.underlyingOverseasStockKrw / finTotal) * 100).toFixed(1)}%**)
      - 연금저축: KODEX 미국나스닥100 (**₩9,118,890**), KODEX TDF2050액티브 (**₩3,579,600**), KODEX 미국S&P500 (**₩2,346,340**)
      - 퇴직연금(IRP): TIGER 미국S&P500 (**₩2,838,560**), TIGER 미국배당다우존스 (**₩2,386,400**), TIGER 미국나스닥100 (**₩2,334,080**), KODEX TDF2050 (**₩722,200**) 등
-     - 토스증권 직투: 마이크로소프트 MSFT (**₩3,073,164**)
+     - 해외직투(토스 등): **미보유 (₩0)**
   2) **실질 해외채권 합계**: **${fmt(s.underlyingOverseasBondKrw)}** (전체 투자자산의 **${usBondPctOfRisk.toFixed(1)}%**)
      - ISA/IRP ACE 미국30년국채액티브 (**₩492,405**) + 미래에셋 미국장기채 T1.125 (**₩18,555,600**)
   3) **실질 국내채권·혼합형**: **${fmt(s.underlyingDomesticBondKrw + s.underlyingDomesticStockKrw)}** (전체 투자자산의 **${krBondPctOfRisk.toFixed(1)}%**)
@@ -314,7 +314,7 @@ ${data.holdings
 #### 🚀 AI 선정 긍정 전망 TOP 5 (Bullish 5)
 1. **#1 NVDA (엔비디아 · 감성 +95점)**: Blackwell GB200 서버 랙 수율 안정화 및 빅테크 4사 AI CAPEX 상향으로 목표주가 상향 리포트 집중 *(연금/IRP 나스닥·S&P500 ETF 내 핵심 비중)*
 2. **#2 AVGO (브로드컴 · 감성 +91점)**: 빅테크 맞춤형 AI 가속기(ASIC) 신규 수주 및 VMware 클라우드 FCF 마진 레버리지 극대화 *(목표매수가 $168 대비 괴리율 -3.11%)*
-3. **#3 MSFT (마이크로소프트 · 감성 +89점)**: Azure AI 예약매출 사상 최대 및 M365 Copilot 엔터프라이즈 도입 가속 *(토스증권 5주 보유중, +7.67% 수익중)*
+3. **#3 MSFT (마이크로소프트 · 감성 +89점)**: Azure AI 예약매출 사상 최대 및 M365 Copilot 엔터프라이즈 도입 가속 *(관심 모니터링 대상)*
 4. **#4 GOOGL (알파벳 A · 감성 +86점)**: 클라우드 영업이익률 17% 돌파 및 Gemini 검색 광고 전환율 상승, M7 내 최저 PER(20.8배) 매력
 5. **#5 SCHD (미국배당다우존스 · 감성 +83점)**: 금리 인하 사이클 대비 배당성장주 자금 순유입 4주 연속 지속 *(IRP 157주 보유중, +26.44% 수익중)*
 
@@ -353,7 +353,7 @@ ${data.holdings
 • **기초자산 실질 기준 포트폴리오 구성**:
   - **현금성 자산 (수동현금·증여 + 달러예수금 $20,312.48)**: **${fmt(s.cashAssetKrw)} (${((s.cashAssetKrw / finTotal) * 100).toFixed(1)}%)**
   - **은행 예적금 (청년도약계좌 등)**: **${fmt(s.bankSavingsKrw)} (${((s.bankSavingsKrw / finTotal) * 100).toFixed(1)}%)**
-  - **실질 해외주식 (연금·IRP 미국ETF + 토스 MSFT)**: **${fmt(s.underlyingOverseasStockKrw)} (${((s.underlyingOverseasStockKrw / finTotal) * 100).toFixed(1)}%)**
+  - **실질 해외주식 (연금·IRP 미국ETF 합산)**: **${fmt(s.underlyingOverseasStockKrw)} (${((s.underlyingOverseasStockKrw / finTotal) * 100).toFixed(1)}%)**
   - **실질 해외채권 (ISA·IRP 미국채30년 + 미국장기채)**: **${fmt(s.underlyingOverseasBondKrw)} (${((s.underlyingOverseasBondKrw / finTotal) * 100).toFixed(1)}%)**
   - **실물자산 (코나·아이폰17Pro·금반지)**: **${fmt(data.physicalAssetsTotalKrw)}** (취득원가 대비 누적감가 **-₩5,080,000** 반영)
 

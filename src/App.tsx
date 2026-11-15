@@ -136,13 +136,8 @@ export function App() {
       fetchLatestPortfolio();
     }, POLLING_INTERVAL_MS);
 
-    const countdownTimer = setInterval(() => {
-      setSecondsUntilRefresh((prev) => (prev <= 1 ? POLLING_SECONDS : prev - 1));
-    }, 1000);
-
     return () => {
       clearInterval(pollTimer);
-      clearInterval(countdownTimer);
     };
   }, [fetchLatestPortfolio]);
 
@@ -190,6 +185,7 @@ export function App() {
 
           {/* Horizontal Stacked Progress Bar (계좌별 자산 비중 가로 스택 바) */}
           <AccountStackedBar
+            key={`account-stacked-bar-${activeTab}`}
             accounts={portfolioData.accountBreakdown}
             totalNetWorthKrw={portfolioData.summary.grandTotalKrw}
             currency={currency}

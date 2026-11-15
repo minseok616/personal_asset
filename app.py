@@ -95,20 +95,67 @@ st.markdown(
     }
 
     /* -------------------------------------------------------------------
-       [2] 탭/화면 이동 시 물이 차오르듯 그려지는 60fps 애니메이션
+       [2] 차트 요소 자체 애니메이션 (원형 차트는 원이 그려지고, 막대는 0에서 쭉 차오름)
+           ※ 창/컨테이너 전체가 올라오는 물차오름(waterRiseUp) 효과 제거 완료
        ------------------------------------------------------------------- */
-    @keyframes waterRiseUp {
+    @property --av-pie-sweep {
+        syntax: '<angle>';
+        inherits: false;
+        initial-value: 360deg;
+    }
+
+    @keyframes avPieCircleSweep {
         0% {
-            clip-path: inset(100% 0 0 0);
-            -webkit-clip-path: inset(100% 0 0 0);
-            opacity: 0.15;
-            transform: translateY(12px);
+            --av-pie-sweep: 0deg;
+            transform: scale(0.94) rotate(-14deg);
+            opacity: 0.25;
+        }
+        100% {
+            --av-pie-sweep: 360deg;
+            transform: scale(1) rotate(0deg);
+            opacity: 1;
+        }
+    }
+
+    @keyframes avBarGrowY {
+        0% {
+            transform: scaleY(0);
+            opacity: 0.25;
+        }
+        100% {
+            transform: scaleY(1);
+            opacity: 1;
+        }
+    }
+
+    @keyframes avBarGrowX {
+        0% {
+            transform: scaleX(0);
+            opacity: 0.25;
+        }
+        100% {
+            transform: scaleX(1);
+            opacity: 1;
+        }
+    }
+
+    @keyframes avBarTextFade {
+        0%, 40% {
+            opacity: 0;
+        }
+        100% {
+            opacity: 1;
+        }
+    }
+
+    @keyframes avLineSweepRight {
+        0% {
+            clip-path: inset(0 100% 0 0);
+            -webkit-clip-path: inset(0 100% 0 0);
         }
         100% {
             clip-path: inset(0 0 0 0);
             -webkit-clip-path: inset(0 0 0 0);
-            opacity: 1;
-            transform: translateY(0);
         }
     }
 
@@ -123,13 +170,9 @@ st.markdown(
         }
     }
 
-    /* 차트 컨테이너 물 차오름 애니메이션 (탭 활성화 시마다 재생) */
+    /* 차트 컨테이너는 고정 (컨테이너 물차오름 애니메이션 없음) */
     .stPlotlyChart,
-    [data-testid="stPlotlyChart"],
-    [data-baseweb="tab-panel"]:not([hidden]) .stPlotlyChart,
-    [data-baseweb="tab-panel"]:not([hidden]) [data-testid="stPlotlyChart"] {
-        animation: waterRiseUp 0.85s cubic-bezier(0.22, 1, 0.36, 1) both !important;
-        will-change: clip-path, transform, opacity;
+    [data-testid="stPlotlyChart"] {
         max-width: 100% !important;
         overflow: hidden !important;
         border-radius: 14px;
@@ -137,9 +180,55 @@ st.markdown(
         background: #131C24;
     }
 
-    /* JS 탭 재진입 트리거용 리플레이 클래스 */
-    .av-replay-water {
-        animation: none !important;
+    /* (A) 원형/도넛 차트: JS conic-gradient 스윕과 충돌하지 않도록 transform/opacity만 부드럽게 보조 */
+    .stPlotlyChart g.pielayer,
+    [data-testid="stPlotlyChart"] g.pielayer,
+    [data-baseweb="tab-panel"]:not([hidden]) .stPlotlyChart g.pielayer,
+    [data-baseweb="tab-panel"]:not([hidden]) [data-testid="stPlotlyChart"] g.pielayer {
+        transform-box: fill-box;
+        transform-origin: center center;
+        will-change: mask-image, -webkit-mask-image;
+    }
+
+    /* (B) 세로 막대 그래프: 각 막대가 바닥(0)에서 위로 쭉 자라나는 애니메이션 */
+    .stPlotlyChart g.barlayer g.trace g.points g.point path,
+    [data-testid="stPlotlyChart"] g.barlayer g.trace g.points g.point path,
+    [data-baseweb="tab-panel"]:not([hidden]) .stPlotlyChart g.barlayer g.trace g.points g.point path,
+    [data-baseweb="tab-panel"]:not([hidden]) [data-testid="stPlotlyChart"] g.barlayer g.trace g.points g.point path {
+        transform-box: fill-box;
+        transform-origin: center bottom;
+        animation: avBarGrowY 0.85s cubic-bezier(0.22, 1, 0.36, 1) both !important;
+        will-change: transform, opacity;
+    }
+
+    /* (C) 가로 막대 그래프(.av-hbar-marker 바로 다음 차트): 각 막대가 왼쪽(0)에서 오른쪽으로 쭉 차오르는 애니메이션 */
+    [data-testid="stElementContainer"]:has(.av-hbar-marker) + [data-testid="stElementContainer"] g.barlayer g.trace g.points g.point path,
+    .stElementContainer:has(.av-hbar-marker) + .stElementContainer g.barlayer g.trace g.points g.point path {
+        transform-box: fill-box;
+        transform-origin: left center !important;
+        animation: avBarGrowX 0.85s cubic-bezier(0.22, 1, 0.36, 1) both !important;
+    }
+
+    /* 막대 순차(Stagger) 딜레이로 리듬감 부여 */
+    .stPlotlyChart g.barlayer g.points g.point:nth-child(2) path { animation-delay: 0.04s !important; }
+    .stPlotlyChart g.barlayer g.points g.point:nth-child(3) path { animation-delay: 0.08s !important; }
+    .stPlotlyChart g.barlayer g.points g.point:nth-child(4) path { animation-delay: 0.12s !important; }
+    .stPlotlyChart g.barlayer g.points g.point:nth-child(5) path { animation-delay: 0.16s !important; }
+    .stPlotlyChart g.barlayer g.points g.point:nth-child(6) path { animation-delay: 0.20s !important; }
+    .stPlotlyChart g.barlayer g.points g.point:nth-child(7) path { animation-delay: 0.24s !important; }
+
+    /* 막대 수치 텍스트는 막대가 차오르면서 부드럽게 페이드인 */
+    .stPlotlyChart g.barlayer g.trace g.points g.point text,
+    [data-testid="stPlotlyChart"] g.barlayer g.trace g.points g.point text {
+        animation: avBarTextFade 0.85s ease-out both !important;
+    }
+
+    /* (D) 선/영역 차트: 좌에서 우로 선이 그려지는 애니메이션 */
+    .stPlotlyChart g.scatterlayer,
+    [data-testid="stPlotlyChart"] g.scatterlayer,
+    [data-baseweb="tab-panel"]:not([hidden]) .stPlotlyChart g.scatterlayer,
+    [data-baseweb="tab-panel"]:not([hidden]) [data-testid="stPlotlyChart"] g.scatterlayer {
+        animation: avLineSweepRight 0.95s cubic-bezier(0.22, 1, 0.36, 1) both !important;
     }
 
     /* 실물자산 감가상각 프로그레스 게이지 바 애니메이션 (0% -> 목표 비율) */
@@ -624,64 +713,114 @@ bond_direct_krw = sum(to_num(b.get("총 납입액"), 0) for b in bonds_rows) or 
     summary_raw.get("채권"), 14_191_300
 )
 
-# 4) 🚗실물_기타자산 (physicalAssets — 시트 병합 타이틀 행 자동 감지 및 정규화)
+# 4) 🚗실물_기타자산 (physicalAssets — 시트 병합 타이틀/합계 행 자동 감지 및 정규화)
 raw_phys_candidates = raw_payload.get("physicalAssets") or []
 physical_rows: List[Dict[str, Any]] = []
 for r in raw_phys_candidates:
     if not isinstance(r, dict):
         continue
+    cat_raw = str(r.get("자산구분") or r.get("카테고리") or "기타실물").strip()
     name = str(r.get("자산명") or r.get("품목명(모델명)") or r.get("품목") or r.get("항목명") or "").strip()
-    cur_val = to_num(r.get("현재가치") or r.get("현재잔존가치(원)") or r.get("현재추정가치") or r.get("잔존가치"), 0)
-    if not name or cur_val <= 0:
+    if not name or cat_raw == "합계" or "실물자산 총" in name:
         continue
+    cur_val = to_num(
+        r.get("현재평가액(원)") or r.get("현재가치") or r.get("현재잔존가치(원)") or r.get("현재추정가치") or r.get("잔존가치"),
+        0,
+    )
+    if cur_val <= 0:
+        continue
+    purchase_val = to_num(r.get("취득원가(원)") or r.get("취득원가"), 0)
+    accum_dep = to_num(r.get("감가상각누계액(원)") or r.get("감가상각누계액"), 0)
+    years_val = r.get("내용연수(년)", "-")
+    res_ratio = to_num(r.get("잔존가치율"), 0)
+    if to_num(years_val, 0) > 0:
+        est_rate = round(((1 - (res_ratio / 100.0 if res_ratio > 1 else res_ratio)) / to_num(years_val, 1)) * 100)
+    else:
+        est_rate = to_num(r.get("연감가율(%)") or r.get("연간상각률") or r.get("연감가율"), 0)
     physical_rows.append(
         {
-            "카테고리": str(r.get("카테고리") or r.get("자산구분") or "기타실물").strip(),
+            "자산구분": cat_raw,
+            "카테고리": cat_raw,
             "자산명": name,
             "취득일": fmt_date_kst(r.get("취득일") or r.get("취득일자")),
-            "취득원가": to_num(r.get("취득원가") or r.get("취득원가(원)"), 0),
-            "연감가율(%)": to_num(r.get("연감가율(%)") or r.get("연간상각률") or r.get("연감가율"), 0),
-            "감가상각누계액": to_num(r.get("감가상각누계액"), 0),
+            "취득원가(원)": purchase_val,
+            "취득원가": purchase_val,
+            "내용연수(년)": years_val,
+            "잔존가치율": res_ratio,
+            "감가상각방법": str(r.get("감가상각방법") or "정액법").strip(),
+            "경과월수(개월)": r.get("경과월수(개월)", "-"),
+            "연감가율(%)": est_rate,
+            "감가상각누계액(원)": accum_dep,
+            "감가상각누계액": accum_dep,
+            "현재평가액(원)": cur_val,
             "현재가치": cur_val,
-            "비고": str(r.get("비고") or "").strip(),
+            "비고 및 감가상각 설명": str(r.get("비고 및 감가상각 설명") or r.get("비고") or "").strip(),
+            "비고": str(r.get("비고 및 감가상각 설명") or r.get("비고") or "").strip(),
         }
     )
 
 if not physical_rows:
     physical_rows = [
         {
+            "자산구분": "자동차",
             "카테고리": "자동차",
-            "자산명": "현대 디 올뉴코나",
-            "취득일": "2025-03-10",
-            "취득원가": 28500000,
-            "연감가율(%)": 15,
-            "감가상각누계액": 5000000,
-            "현재가치": 23500000,
-            "비고": "연 15% 정률 감가상각 반영",
+            "자산명": "현대 디 올뉴코나 1.6 터보",
+            "취득일": "2026-04-01",
+            "취득원가(원)": 28000000,
+            "취득원가": 28000000,
+            "내용연수(년)": 5,
+            "잔존가치율": 0.1,
+            "감가상각방법": "정액법 (5년)",
+            "경과월수(개월)": 7,
+            "연감가율(%)": 18,
+            "감가상각누계액(원)": 2940000,
+            "감가상각누계액": 2940000,
+            "현재평가액(원)": 25060000,
+            "현재가치": 25060000,
+            "비고 및 감가상각 설명": "차량 감가상각률 연 18% (내용연수 60개월, 잔존가치 10%)",
+            "비고": "차량 감가상각률 연 18% (내용연수 60개월, 잔존가치 10%)",
         },
         {
+            "자산구분": "전자기기",
             "카테고리": "전자기기",
-            "자산명": "아이폰 17 Pro",
-            "취득일": "2025-10-05",
-            "취득원가": 2150000,
-            "연감가율(%)": 30,
-            "감가상각누계액": 250000,
-            "현재가치": 1900000,
-            "비고": "연 30% 정률 감가상각 반영",
+            "자산명": "아이폰 17 프로",
+            "취득일": "2026-01-01",
+            "취득원가(원)": 1550000,
+            "취득원가": 1550000,
+            "내용연수(년)": 3,
+            "잔존가치율": 0.0,
+            "감가상각방법": "정액법 (3년)",
+            "경과월수(개월)": 10,
+            "연감가율(%)": 33,
+            "감가상각누계액(원)": 430556,
+            "감가상각누계액": 430556,
+            "현재평가액(원)": 1119444,
+            "현재가치": 1119444,
+            "비고 및 감가상각 설명": "스마트폰 감가상각 (내용연수 36개월, 잔존가치 0%)",
+            "비고": "스마트폰 감가상각 (내용연수 36개월, 잔존가치 0%)",
         },
         {
+            "자산구분": "귀금속",
             "카테고리": "귀금속",
-            "자산명": "순금 반지 (24K)",
-            "취득일": "2024-05-20",
-            "취득원가": 750000,
+            "자산명": "금반지 (순금 1돈)",
+            "취득일": "2026-08-01",
+            "취득원가(원)": 300000,
+            "취득원가": 300000,
+            "내용연수(년)": "-",
+            "잔존가치율": 1.0,
+            "감가상각방법": "비상각(시세반영)",
+            "경과월수(개월)": "-",
             "연감가율(%)": 0,
-            "감가상각누계액": -170000,
-            "현재가치": 920000,
-            "비고": "금 한돈(3.75g) 현물 시세 연동",
+            "감가상각누계액(원)": 0,
+            "감가상각누계액": 0,
+            "현재평가액(원)": 300000,
+            "현재가치": 300000,
+            "비고 및 감가상각 설명": "귀금속 자산가치 보존 (비감가상각 대상)",
+            "비고": "귀금속 자산가치 보존 (비감가상각 대상)",
         },
     ]
 
-physical_total_krw = sum(to_num(r.get("현재가치"), 0) for r in physical_rows) or 26_320_000
+physical_total_krw = sum(to_num(r.get("현재평가액(원)") or r.get("현재가치"), 0) for r in physical_rows) or 26_479_444
 
 # ---------------------------------------------------------------------------
 # 4-B. KIS 실시간 잔고 분리 (읽기 전용: 현금성 예수금 vs 투자 종목)
@@ -719,27 +858,10 @@ for r in kis_rows:
     else:
         stock_holding_rows.append(item)
 
-if not any(str(h.get("종목코드")).upper() == "MSFT" for h in stock_holding_rows):
-    stock_holding_rows.append(
-        {
-            "계좌구분": "토스증권",
-            "시장구분": "NASD",
-            "종목코드": "MSFT",
-            "종목명": "Microsoft Corp.",
-            "보유수량_num": 5.389457,
-            "매수평단가_num": 417.34,
-            "현재가_num": 426.59,
-            "평가금액_num": 3073000,
-            "평가손익_num": 225800,
-            "수익률_num": 7.93,
-            "실질자산분류": "해외주식",
-        }
-    )
-
 usd_deposit_krw = sum(c["평가금액_num"] for c in cash_deposit_rows) or 27_149_048
 usd_deposit_usd = usd_deposit_krw / usd_krw_rate
-stock_eval_total_krw = sum(h["평가금액_num"] for h in stock_holding_rows) or 28_907_669
-stock_profit_total_krw = sum(h["평가손익_num"] for h in stock_holding_rows) or 1_657_149
+stock_eval_total_krw = sum(h["평가금액_num"] for h in stock_holding_rows) or 25_834_505
+stock_profit_total_krw = sum(h["평가손익_num"] for h in stock_holding_rows) or 1_431_349
 stock_buy_total_krw = max(stock_eval_total_krw - stock_profit_total_krw, 1)
 stock_return_pct = (stock_profit_total_krw / stock_buy_total_krw) * 100
 
@@ -966,7 +1088,7 @@ with tabs[0]:
         st.plotly_chart(fig_donut, use_container_width=True, config={"displayModeBar": False})
 
     with col_chart_r:
-        st.markdown("#### 🏦 계좌별 자산 비중 (수동 + 한투 자동연동)")
+        st.markdown('#### 🏦 계좌별 자산 비중 (수동 + 한투 자동연동)<span class="av-hbar-marker"></span>', unsafe_allow_html=True)
         acc_df = pd.DataFrame(
             [
                 {"계좌": "수동 현금·증여·기여금", "평가액(원)": manual_cash_total_krw, "구분": "수동관리(수정가능)"},
@@ -1091,9 +1213,9 @@ with tabs[0]:
     with p_col1:
         for p in physical_rows:
             name = p.get("자산명") or p.get("항목명") or "실물자산"
-            cost = to_num(p.get("취득원가"), 0)
-            dep = to_num(p.get("감가상각누계액"), 0)
-            cur = to_num(p.get("현재가치") or p.get("현재추정가치") or p.get("잔존가치"), 0)
+            cost = to_num(p.get("취득원가(원)") or p.get("취득원가"), 0)
+            dep = to_num(p.get("감가상각누계액(원)") or p.get("감가상각누계액"), 0)
+            cur = to_num(p.get("현재평가액(원)") or p.get("현재가치") or p.get("현재추정가치") or p.get("잔존가치"), 0)
             dep_rate_val = to_num(p.get("연감가율(%)") or p.get("연감가율"), 0)
             rate_badge = (
                 f"연 {dep_rate_val:.0f}% 감가" if dep_rate_val > 0 else str(p.get("연감가율") or "현물 시세 연동")
@@ -1150,7 +1272,7 @@ with tabs[1]:
 
     account_filter = st.radio(
         "계좌 필터 선택",
-        options=["전체", "위탁계좌", "ISA중개형", "연금저축", "퇴직연금(IRP)", "토스증권"],
+        options=["전체", "위탁계좌", "ISA중개형", "연금저축", "퇴직연금(IRP)"],
         horizontal=True,
     )
 
@@ -1523,18 +1645,21 @@ with tabs[2]:
 
         df_phys_init = pd.DataFrame(physical_rows)
         phys_cols = [
-            "카테고리",
+            "자산구분",
             "자산명",
             "취득일",
-            "취득원가",
-            "연감가율(%)",
-            "감가상각누계액",
-            "현재가치",
-            "비고",
+            "취득원가(원)",
+            "내용연수(년)",
+            "잔존가치율",
+            "감가상각방법",
+            "경과월수(개월)",
+            "감가상각누계액(원)",
+            "현재평가액(원)",
+            "비고 및 감가상각 설명",
         ]
         for col in phys_cols:
             if col not in df_phys_init.columns:
-                df_phys_init[col] = "" if col in ("카테고리", "자산명", "취득일", "비고") else 0
+                df_phys_init[col] = "" if col in ("자산구분", "자산명", "취득일", "감가상각방법", "비고 및 감가상각 설명") else 0
         df_phys_init = df_phys_init[phys_cols]
 
         edited_phys_df = st.data_editor(
@@ -1543,15 +1668,19 @@ with tabs[2]:
             num_rows="dynamic",
             use_container_width=True,
             hide_index=True,
+            disabled=["경과월수(개월)", "감가상각누계액(원)", "현재평가액(원)"],
             column_config={
-                "카테고리": st.column_config.TextColumn("자산구분 (A열)"),
-                "자산명": st.column_config.TextColumn("품목명 (B열)", required=True),
+                "자산구분": st.column_config.TextColumn("자산구분 (A열)"),
+                "자산명": st.column_config.TextColumn("자산명 (B열)", required=True),
                 "취득일": st.column_config.TextColumn("취득일 (C열)"),
-                "취득원가": st.column_config.NumberColumn("취득원가 (D열)", format="₩%d"),
-                "연감가율(%)": st.column_config.NumberColumn("연감가율 (G열)", format="%d%%"),
-                "감가상각누계액": st.column_config.NumberColumn("감가상각누계액 (H열)", format="₩%d"),
-                "현재가치": st.column_config.NumberColumn("현재잔존가치 (I열)", format="₩%d"),
-                "비고": st.column_config.TextColumn("비고 (J열)"),
+                "취득원가(원)": st.column_config.NumberColumn("취득원가 (D열)", format="₩%d"),
+                "내용연수(년)": st.column_config.TextColumn("내용연수 (E열)"),
+                "잔존가치율": st.column_config.NumberColumn("잔존가치율 (F열)", format="%.2f"),
+                "감가상각방법": st.column_config.TextColumn("감가상각방법 (G열)"),
+                "경과월수(개월)": st.column_config.TextColumn("🔒 경과월수 (H열 수식유지)"),
+                "감가상각누계액(원)": st.column_config.NumberColumn("🔒 감가상각누계액 (I열 수식유지)", format="₩%d"),
+                "현재평가액(원)": st.column_config.NumberColumn("🔒 현재평가액 (J열 수식유지)", format="₩%d"),
+                "비고 및 감가상각 설명": st.column_config.TextColumn("비고 (K열)"),
             },
         )
 
@@ -1593,7 +1722,9 @@ function doPost(e) {
 
     var editableColMap = body.editableColumnIndices || {};
     var formulaColMap = body.formulaColumnIndices || {};
+    var formulaCols = Array.isArray(body.formulaCols) ? body.formulaCols : (body.preserveFormulaColumns || []);
     var headerRow = (body.sheetName.indexOf('실물_기타자산') !== -1) ? 3 : 1;
+    var headers = sheet.getRange(headerRow, 1, 1, sheet.getLastColumn()).getValues()[0];
 
     if (body.action === 'appendRow' && body.row) {
       var nextRowIdx = sheet.getLastRow() + 1;
@@ -1636,14 +1767,90 @@ function doPost(e) {
 # ===========================================================================
 with tabs[3]:
     st.markdown("#### 📜 KIS 매매체결 DB & 💸 해외주식 배당내역 DB (🔒 KIS 읽기 전용)")
-    trades_data = raw_payload.get("kisTrades") or [
-        {"체결일시": "2026-11-12", "계좌구분": "연금저축", "매매구분": "매수", "종목명": "KODEX 미국S&P500", "수량": 25, "체결단가": 18900, "원화환산액": 472500},
-        {"체결일시": "2026-11-08", "계좌구분": "퇴직연금(IRP)", "매매구분": "매수", "종목명": "TIGER 미국S&P500", "수량": 30, "체결단가": 19310, "원화환산액": 579300},
-        {"체결일시": "2026-11-03", "계좌구분": "ISA중개형", "매매구분": "매수", "종목명": "KODEX 미국나스닥100", "수량": 18, "체결단가": 17250, "원화환산액": 310500},
+    raw_trades = raw_payload.get("kisTrades") or [
+        {
+            "체결일시": "20261112 142210",
+            "계좌구분": "연금저축",
+            "매매구분": "매수",
+            "시장": "KRX",
+            "종목코드": "379810",
+            "종목명": "KODEX 미국나스닥100",
+            "체결수량": 18,
+            "체결단가": 24915,
+            "체결총액": 448470,
+            "통화": "KRW",
+            "원화환산액": 448470,
+        },
+        {
+            "체결일시": "20261108 101544",
+            "계좌구분": "퇴직연금(IRP)",
+            "매매구분": "매수",
+            "시장": "KRX",
+            "종목코드": "360750",
+            "종목명": "TIGER 미국S&P500",
+            "체결수량": 12,
+            "체결단가": 25120,
+            "체결총액": 301440,
+            "통화": "KRW",
+            "원화환산액": 301440,
+        },
+        {
+            "체결일시": "20261103 151033",
+            "계좌구분": "ISA중개형",
+            "매매구분": "매수",
+            "시장": "KRX",
+            "종목코드": "453850",
+            "종목명": "ACE 미국30년국채액티브(H)",
+            "체결수량": 44,
+            "체결단가": 6960,
+            "체결총액": 306240,
+            "통화": "KRW",
+            "원화환산액": 306240,
+        },
     ]
+    trades_data = []
+    for tr in raw_trades:
+        if not isinstance(tr, dict):
+            continue
+        raw_dt = str(tr.get("체결일시") or "").strip()
+        fmt_dt = re.sub(
+            r"^(\d{4})(\d{2})(\d{2})\s+(\d{2})(\d{2})(\d{2})$",
+            r"\1-\2-\3 \4:\5:\6",
+            raw_dt,
+        )
+        trades_data.append(
+            {
+                "체결일시": fmt_dt,
+                "계좌구분": str(tr.get("계좌구분") or ""),
+                "매매구분": str(tr.get("매매구분") or ""),
+                "시장": str(tr.get("시장") or tr.get("시장구분") or ""),
+                "종목코드": str(tr.get("종목코드") or ""),
+                "종목명": str(tr.get("종목명") or ""),
+                "체결수량": to_num(tr.get("체결수량") or tr.get("수량"), 0),
+                "체결단가": round(to_num(tr.get("체결단가"), 0), 2),
+                "체결총액": round(to_num(tr.get("체결총액") or tr.get("체결금액"), 0), 2),
+                "통화": str(tr.get("통화") or "KRW"),
+                "원화환산액": round(to_num(tr.get("원화환산액"), 0)),
+            }
+        )
+
     dividends_data = raw_payload.get("kisDividends") or [
-        {"배당기준일": "2026-11-10", "계좌구분": "토스증권", "종목명": "Microsoft (MSFT)", "세전배당($)": 4.47, "세후배당($)": 3.80, "원화환산액": 5079},
-        {"배당기준일": "2026-11-04", "계좌구분": "연금저축", "종목명": "TIGER 미국배당다우존스", "세전배당($)": 18.20, "세후배당($)": 18.20, "원화환산액": 24325},
+        {
+            "배당기준일": "2026-11-12",
+            "계좌구분": "퇴직연금(IRP)",
+            "종목명": "TIGER 미국배당다우존스",
+            "세전배당($)": 7.05,
+            "세후배당($)": 7.05,
+            "원화환산액": 9420,
+        },
+        {
+            "배당기준일": "2026-11-04",
+            "계좌구분": "ISA중개형",
+            "종목명": "ACE 미국30년국채액티브(H)",
+            "세전배당($)": 0.99,
+            "세후배당($)": 0.99,
+            "원화환산액": 1320,
+        },
     ]
 
     t_col1, t_col2 = st.columns(2)
@@ -1663,10 +1870,10 @@ with tabs[4]:
 
     bullish_list = [
         ("NVDA", "NVIDIA Corp.", "+94점", "Blackwell 서버 랙 출하 가속 및 하이퍼스케일러 AI CAPEX 상향"),
-        ("MSFT", "Microsoft", "+89점", "Azure AI 매출 성장률 34% 돌파 및 Copilot 엔터프라이즈 확산"),
-        ("AVGO", "Broadcom", "+86점", "맞춤형 AI ASIC(XPU) 수주 확대 및 VMware 현금흐름 개선"),
-        ("META", "Meta Platforms", "+82점", "Llama 기반 광고 타겟팅 효율 상승 및 릴스 수익화 호조"),
-        ("AMZN", "Amazon", "+80점", "AWS 영업이익률 역대 최고치 경신 및 물류 자동화 비용 절감"),
+        ("AVGO", "Broadcom", "+91점", "맞춤형 AI ASIC(XPU) 수주 확대 및 VMware 현금흐름 개선"),
+        ("MSFT", "Microsoft (관심종목)", "+89점", "Azure AI 매출 성장률 34% 돌파 및 Copilot 엔터프라이즈 확산"),
+        ("GOOGL", "Alphabet A", "+86점", "Gemini 검색 AI 광고 전환율 상승 및 클라우드 영업이익률 개선"),
+        ("AMZN", "Amazon", "+82점", "AWS 영업이익률 역대 최고치 경신 및 물류 자동화 비용 절감"),
     ]
     bearish_list = [
         ("INTC", "Intel Corp.", "-76점", "파운드리 적자 지속 및 서버 CPU 점유율 하락 우려"),
@@ -1926,7 +2133,7 @@ with tabs[7]:
         st.info("React 빌드 아티팩트(`dist/index.html`)가 없을 때는 상단 네이티브 탭을 사용하세요.")
 
 # ---------------------------------------------------------------------------
-# 8. 탭 전환 시마다 물 차오름 애니메이션(.stPlotlyChart & .av-gauge-fill) 재실행 브릿지
+# 8. 탭 전환 시마다 원형 차트(원 그리기) & 막대 그래프(막대 차오름) 애니메이션 재실행 브릿지
 # ---------------------------------------------------------------------------
 components.html(
     """
@@ -1934,27 +2141,70 @@ components.html(
     (function() {
         try {
             const doc = window.parent.document;
-            if (doc.__avWaterAnimBound) return;
-            doc.__avWaterAnimBound = true;
+            if (doc.__avChartDrawBound) return;
+            doc.__avChartDrawBound = true;
 
-            function replayWaterFill(container) {
+            function animatePieCircleSweep(pieLayer) {
+                if (pieLayer.__avRafId) {
+                    cancelAnimationFrame(pieLayer.__avRafId);
+                }
+                const duration = 880;
+                const start = performance.now();
+                function step(now) {
+                    const t = Math.min(1, Math.max(0, (now - start) / duration));
+                    const eased = 1 - Math.pow(1 - t, 3);
+                    const deg = eased * 360;
+                    if (t < 1) {
+                        const edge = Math.min(360, deg + 1.8);
+                        const maskVal = `conic-gradient(from 0deg at 50% 50%, #000 0deg, #000 ${deg.toFixed(2)}deg, transparent ${edge.toFixed(2)}deg, transparent 360deg)`;
+                        pieLayer.style.webkitMaskImage = maskVal;
+                        pieLayer.style.maskImage = maskVal;
+                        pieLayer.__avRafId = requestAnimationFrame(step);
+                    } else {
+                        pieLayer.style.webkitMaskImage = '';
+                        pieLayer.style.maskImage = '';
+                        pieLayer.__avRafId = null;
+                    }
+                }
+                pieLayer.__avRafId = requestAnimationFrame(step);
+            }
+
+            function replayChartDrawAnimations(container, includeBars) {
                 const root = container || doc;
-                const charts = root.querySelectorAll('.stPlotlyChart, [data-testid="stPlotlyChart"], .av-gauge-fill');
-                charts.forEach((el) => {
+
+                // 1) 원형/도넛 차트: 자연스럽게 원이 한 바퀴 그려지는 60fps 스윕 애니메이션 재생
+                const pieLayers = root.querySelectorAll('.stPlotlyChart g.pielayer, [data-testid="stPlotlyChart"] g.pielayer');
+                pieLayers.forEach((el) => {
+                    animatePieCircleSweep(el);
+                });
+
+                if (!includeBars) return;
+
+                // 2) 막대 그래프 & 영역 차트 & 게이지 바: 탭 전환 시 막대가 0에서 쭉 차오르는 애니메이션 재생
+                const barAndGaugeEls = root.querySelectorAll(
+                    '.stPlotlyChart g.barlayer g.points g.point path, ' +
+                    '.stPlotlyChart g.barlayer g.points g.point text, ' +
+                    '.stPlotlyChart g.scatterlayer, ' +
+                    '.av-gauge-fill'
+                );
+                barAndGaugeEls.forEach((el) => {
                     el.style.animation = 'none';
-                    void el.offsetHeight; // Reflow 강제 후 애니메이션 재시작
+                    void el.offsetHeight;
                     el.style.animation = '';
                 });
             }
 
+            // 초기 로드 시 원형 차트 스윕만 부드럽게 시작 (막대는 CSS 초기 애니메이션 그대로 유지하여 끊김 방지)
+            setTimeout(() => replayChartDrawAnimations(doc, false), 40);
+
             doc.addEventListener('click', function(e) {
                 const tabBtn = e.target.closest('[data-baseweb="tab"]');
                 if (tabBtn) {
-                    setTimeout(() => replayWaterFill(doc), 35);
+                    setTimeout(() => replayChartDrawAnimations(doc, true), 35);
                 }
             }, true);
         } catch (err) {
-            // cross-origin 환경에서는 CSS :not([hidden]) 선택자가 자동으로 애니메이션을 수행함
+            // cross-origin 환경에서는 CSS 애니메이션이 자동 동작
         }
     })();
     </script>

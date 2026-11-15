@@ -202,7 +202,7 @@ export interface IntegratedSummary {
   overseasStockKrw: number;
   overseasBondKrw: number;
   // Underlying Exposure Basis (기초자산 실질 기준 - 권장)
-  underlyingOverseasStockKrw: number; // KRX 상장 미국/해외주식 ETF + 미국 직투 주식 (MSFT)
+  underlyingOverseasStockKrw: number; // KRX 상장 미국/해외주식 ETF + 미국 직투 주식
   underlyingOverseasBondKrw: number; // KRX 상장 미국국채 ETF + 해외 직접 채권 (T1.125)
   underlyingDomesticStockKrw: number; // 실질 국내주식
   underlyingDomesticBondKrw: number; // 실질 국내채권/채권혼합 (KODEX 코리아배당성장채권혼합 등)

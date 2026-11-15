@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   BarChart,
   Bar,
@@ -30,10 +30,10 @@ export const MonthlySavingsChart: React.FC<MonthlySavingsChartProps> = ({
 }) => {
   const [viewMode, setViewMode] = useState<'ALL' | 'SAVINGS_ONLY'>('ALL');
 
-  const chartData =
-    viewMode === 'ALL'
-      ? combinedCashflowBars
-      : savingsDist.filter((d) => d.amount > 0);
+  const chartData = useMemo(
+    () => (viewMode === 'ALL' ? combinedCashflowBars : savingsDist.filter((d) => d.amount > 0)),
+    [viewMode, combinedCashflowBars, savingsDist]
+  );
 
   return (
     <div className="bg-[#131C24] border border-[#1F2D3A] rounded-xl p-6 flex flex-col justify-between shadow-lg h-full">
@@ -81,6 +81,7 @@ export const MonthlySavingsChart: React.FC<MonthlySavingsChartProps> = ({
         <div className="w-full h-[270px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
+              key={`monthly-bar-chart-${viewMode}`}
               data={chartData}
               layout="vertical"
               margin={{ top: 4, right: 24, left: 10, bottom: 4 }}
@@ -133,7 +134,15 @@ export const MonthlySavingsChart: React.FC<MonthlySavingsChartProps> = ({
                   );
                 }}
               />
-              <Bar dataKey="amount" radius={[0, 6, 6, 0]} maxBarSize={26} isAnimationActive={false}>
+              <Bar
+                dataKey="amount"
+                radius={[0, 6, 6, 0]}
+                maxBarSize={26}
+                isAnimationActive={true}
+                animationBegin={50}
+                animationDuration={850}
+                animationEasing="ease-out"
+              >
                 {chartData.map((entry, idx) => (
                   <Cell key={`bar-${idx}`} fill={entry.color} />
                 ))}

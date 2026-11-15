@@ -8,7 +8,7 @@ Google Sheets (gspread) 및 Apps Script JSON API 양방향(Read/Write) 연동 �
 2. 쓰기(Write — 비-KIS 수동 관리 자산 4대 시트 전용):
    - KIS API 자동연동 자산은 읽기 전용(Read-Only)으로 보호
    - `💰입출금통장`, `🌱예적금내역`, `🏠채권내역`, `🚗실물_기타자산`에 대해
-     `PORTFOLIO_API_URL`의 `doPost`로 `{ action, sheetName, row, updates, preserveFormulaColumns, formulaColumnIndices, editableColumnIndices, token }` JSON POST 전송
+     `PORTFOLIO_API_URL`의 `doPost`로 `{ token, action, sheetName, row, updates, formulaCols, preserveFormulaColumns, formulaColumnIndices, editableColumnIndices }` JSON POST 전송
    - 수식 열(예: `💰입출금통장` B열[2열] `총합계`, `🌱예적금내역` I~N열[9~14열] `만기수령액` 등, `🏠채권내역` F~G열[6~7열] `총 납입액`)은
      열 이름과 1-based 열 인덱스를 모두 매핑하여 절대 덮어쓰지 않도록 보호
 """
@@ -45,7 +45,7 @@ FORMULA_PROTECTED_COLUMNS: Dict[str, List[str]] = {
         "세후이자",
     ],
     "🏠채권내역": ["수령", "총 납입액"],
-    "🚗실물_기타자산": [],
+    "🚗실물_기타자산": ["경과월수(개월)", "감가상각누계액(원)", "현재평가액(원)"],
 }
 
 # 2) 시트별 실제 구글 시트 1-based 열 인덱스 매핑 (수식 셀 덮어쓰기 원천 차단용)
@@ -63,7 +63,11 @@ SHEET_FORMULA_COL_INDICES: Dict[str, Dict[str, int]] = {
         "수령": 6,        # F열
         "총 납입액": 7,   # G열
     },
-    "🚗실물_기타자산": {},
+    "🚗실물_기타자산": {
+        "경과월수(개월)": 8,       # H열
+        "감가상각누계액(원)": 9,   # I열
+        "현재평가액(원)": 10,      # J열
+    },
 }
 
 SHEET_EDITABLE_COL_INDICES: Dict[str, Dict[str, int]] = {
@@ -97,14 +101,15 @@ SHEET_EDITABLE_COL_INDICES: Dict[str, Dict[str, int]] = {
         # F~G열(6~7열: 수령, 총 납입액)은 수식 열이므로 제외
     },
     "🚗실물_기타자산": {
-        "카테고리": 1,        # A열 (자산구분)
-        "자산명": 2,          # B열 (품목명)
-        "취득일": 3,          # C열
-        "취득원가": 4,        # D열
-        "연감가율(%)": 7,     # G열
-        "감가상각누계액": 8,  # H열
-        "현재가치": 9,        # I열 (현재잔존가치)
-        "비고": 10,           # J열
+        "자산구분": 1,               # A열
+        "자산명": 2,                 # B열
+        "취득일": 3,                 # C열
+        "취득원가(원)": 4,           # D열
+        "내용연수(년)": 5,           # E열
+        "잔존가치율": 6,             # F열
+        "감가상각방법": 7,           # G열
+        # H~J열(8~10열: 경과월수, 감가상각누계액(원), 현재평가액(원))은 수식 열
+        "비고 및 감가상각 설명": 11, # K열
     },
 }
 
@@ -192,13 +197,14 @@ def post_sheet_write_action(
     )
 
     payload: Dict[str, Any] = {
+        "token": api_token,
         "action": action,
         "sheetName": sheet_name,
+        "formulaCols": protected_cols,
         "preserveFormulaColumns": protected_cols,
         "formulaColumnIndices": formula_col_indices,
         "editableColumnIndices": editable_col_indices,
         "copyFormulaFromPrevRow": True,
-        "token": api_token,
     }
     if sanitized_row is not None:
         payload["row"] = sanitized_row
@@ -294,7 +300,7 @@ def fetch_portfolio_raw_payload() -> Tuple[Dict[str, Any], str]:
 
     if api_url:
         try:
-            resp = requests.get(api_url, timeout=15, headers={"Accept": "application/json"})
+            resp = requests.get(api_url, timeout=25, headers={"Accept": "application/json"})
             resp.raise_for_status()
             data = resp.json()
             if isinstance(data, dict) and data:
@@ -324,15 +330,15 @@ def get_default_fallback_payload() -> Dict[str, Any]:
     return {
         "summary": {
             "기준일": "2026-11-15",
-            "합계": 237029405,
+            "합계": 207826654,
             "현금": 93110610,
             "예적금": 44130000,
-            "주식": 28907669,
-            "채권": 14191300,
+            "주식": 25834505,
+            "채권": 17570790,
         },
         "integratedSummary": {
-            "총순자산_실물포함": 263349405,
-            "금융순자산": 237029405,
+            "총순자산_실물포함": 234146654,
+            "금융순자산": 207826654,
             "수동관리현금성": 93110610,
             "실물자산합계": 26320000,
             "환율": 1336.57,
@@ -396,34 +402,43 @@ def get_default_fallback_payload() -> Dict[str, Any]:
         ],
         "physicalAssets": [
             {
-                "자산명": "현대 디 올뉴코나",
-                "카테고리": "자동차",
-                "취득일": "2025-03-10",
-                "취득원가": 28500000,
-                "연감가율(%)": 15,
-                "감가상각누계액": 5000000,
-                "현재가치": 23500000,
-                "비고": "연 15% 정률 감가상각 반영",
+                "자산구분": "자동차",
+                "자산명": "현대 디 올뉴코나 1.6 터보",
+                "취득일": "2026-04-01",
+                "취득원가(원)": 28000000,
+                "내용연수(년)": 5,
+                "잔존가치율": 0.1,
+                "감가상각방법": "정액법 (5년)",
+                "경과월수(개월)": 7,
+                "감가상각누계액(원)": 2940000,
+                "현재평가액(원)": 25060000,
+                "비고 및 감가상각 설명": "차량 감가상각률 연 18% (내용연수 60개월, 잔존가치 10%)",
             },
             {
-                "자산명": "아이폰 17 Pro",
-                "카테고리": "전자기기",
-                "취득일": "2025-10-05",
-                "취득원가": 2150000,
-                "연감가율(%)": 30,
-                "감가상각누계액": 250000,
-                "현재가치": 1900000,
-                "비고": "연 30% 정률 감가상각 반영",
+                "자산구분": "전자기기",
+                "자산명": "아이폰 17 프로",
+                "취득일": "2026-01-01",
+                "취득원가(원)": 1550000,
+                "내용연수(년)": 3,
+                "잔존가치율": 0,
+                "감가상각방법": "정액법 (3년)",
+                "경과월수(개월)": 10,
+                "감가상각누계액(원)": 430556,
+                "현재평가액(원)": 1119444,
+                "비고 및 감가상각 설명": "스마트폰 감가상각 (내용연수 36개월, 잔존가치 0%)",
             },
             {
-                "자산명": "순금 반지 (24K)",
-                "카테고리": "귀금속",
-                "취득일": "2024-05-20",
-                "취득원가": 750000,
-                "연감가율(%)": 0,
-                "감가상각누계액": -170000,
-                "현재가치": 920000,
-                "비고": "금 한돈(3.75g) 현물 시세 연동",
+                "자산구분": "귀금속",
+                "자산명": "금반지 (순금 1돈)",
+                "취득일": "2026-08-01",
+                "취득원가(원)": 300000,
+                "내용연수(년)": "-",
+                "잔존가치율": 1,
+                "감가상각방법": "비상각(시세반영)",
+                "경과월수(개월)": "-",
+                "감가상각누계액(원)": 0,
+                "현재평가액(원)": 300000,
+                "비고 및 감가상각 설명": "귀금속 자산가치 보존 (비감가상각 대상)",
             },
         ],
         "kisRealtime": [
@@ -440,20 +455,6 @@ def get_default_fallback_payload() -> Dict[str, Any]:
                 "평가손익": 133452,
                 "수익률(%)": 0.49,
                 "실질자산분류": "현금성 자산",
-            },
-            {
-                "기준시각": "2026-11-15 09:00",
-                "시장구분": "NASD",
-                "계좌구분": "토스증권",
-                "종목코드": "MSFT",
-                "종목명": "Microsoft Corp.",
-                "보유수량": 5.389457,
-                "매수평단가": 417.34,
-                "현재가": 426.59,
-                "평가금액": 3073000,
-                "평가손익": 225800,
-                "수익률(%)": 7.93,
-                "실질자산분류": "해외주식",
             },
             {
                 "기준시각": "2026-11-15 09:00",

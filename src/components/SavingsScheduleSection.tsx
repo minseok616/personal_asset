@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import {
   PiggyBank,
   CalendarClock,
@@ -185,9 +186,15 @@ export const SavingsScheduleSection: React.FC<SavingsScheduleSectionProps> = ({
                     </span>
                   </div>
                   <div className="w-full h-2 bg-[#0B1116] rounded-full overflow-hidden border border-[#1F2D3A]">
-                    <div
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.min(100, Math.max(4, item.progressPercent))}%` }}
+                      transition={{
+                        duration: 0.85,
+                        delay: idx * 0.05,
+                        ease: [0.22, 1, 0.36, 1],
+                      }}
                       className="h-full bg-gradient-to-r from-[#2979FF] to-[#00E676] rounded-full"
-                      style={{ width: `${Math.min(100, Math.max(4, item.progressPercent))}%` }}
                     />
                   </div>
                 </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   RefreshCw,
@@ -74,13 +74,26 @@ export const Header: React.FC<HeaderProps> = ({
   isRefreshing,
   isFromCache,
   errorMsg,
-  secondsUntilRefresh,
+  secondsUntilRefresh: initialSeconds = 300,
   onManualRefresh,
 }) => {
   const [showDiagPanel, setShowDiagPanel] = useState<boolean>(false);
+  const [localSeconds, setLocalSeconds] = useState<number>(initialSeconds);
+
+  useEffect(() => {
+    setLocalSeconds(300);
+  }, [lastUpdated]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setLocalSeconds((prev) => (prev <= 1 ? 300 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const { title, subtitle } = TAB_TITLES[activeTab];
-  const mins = Math.floor(secondsUntilRefresh / 60);
-  const secs = secondsUntilRefresh % 60;
+  const mins = Math.floor(localSeconds / 60);
+  const secs = localSeconds % 60;
   const countdownStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 
   const syncedTimeStr = lastUpdated ? formatTimeKST(lastUpdated) : diagnostics.lastSyncedAt || baseDate;
