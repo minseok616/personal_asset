@@ -11,8 +11,9 @@ Secrets 및 환경변수 통합 관리 헬퍼 모듈 (utils/secrets_helper.py)
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -26,12 +27,110 @@ else:
     load_dotenv(override=False)
 
 
+def _clean_secret_value(val: Any) -> Any:
+    """문자열 시크릿 값 앞뒤의 공백 및 불필요한 따옴표를 안전하게 정리합니다."""
+    if isinstance(val, str):
+        cleaned = val.strip()
+        if len(cleaned) >= 2 and (
+            (cleaned[0] == '"' and cleaned[-1] == '"')
+            or (cleaned[0] == "'" and cleaned[-1] == "'")
+        ):
+            cleaned = cleaned[1:-1].strip()
+        return cleaned
+    return val
+
+
 def _has_streamlit_secrets() -> bool:
     """st.secrets가 정상적으로 초기화되어 접근 가능한지 안전하게 확인합니다."""
     try:
         return len(st.secrets) > 0
     except Exception:
         return False
+
+
+def _read_from_mapping(mapping_obj: Any, candidate_keys: List[str]) -> Tuple[Any, Optional[str]]:
+    """st.secrets 또는 섹션(AttrDict/dict)에서 대소문자 변형 포함 키를 안전하게 조회합니다."""
+    if mapping_obj is None:
+        return None, None
+    try:
+        keys_available = list(mapping_obj.keys()) if hasattr(mapping_obj, "keys") else []
+    except Exception:
+        keys_available = []
+
+    lower_map = {str(k).lower(): k for k in keys_available}
+
+    for cand in candidate_keys:
+        try:
+            if isinstance(mapping_obj, Mapping) or hasattr(mapping_obj, "__contains__"):
+                if cand in mapping_obj:
+                    val = _clean_secret_value(mapping_obj[cand])
+                    if val not in (None, ""):
+                        return val, cand
+        except Exception:
+            pass
+
+        matched_key = lower_map.get(cand.lower())
+        if matched_key is not None:
+            try:
+                val = _clean_secret_value(mapping_obj[matched_key])
+                if val not in (None, ""):
+                    return val, str(matched_key)
+            except Exception:
+                pass
+    return None, None
+
+
+def get_secret_with_source(
+    key: str,
+    default: Any = None,
+    section: Optional[str] = None,
+    env_fallbacks: Optional[list[str]] = None,
+) -> Tuple[Any, str]:
+    """
+    1순위: Streamlit Cloud `st.secrets[section][key]` (중첩 섹션)
+    2순위: Streamlit Cloud `st.secrets[key]` (최상위 키)
+    3순위: 로컬 `.env` 및 OS 환경변수(`os.getenv`)
+    값과 함께 출처 라벨을 반환합니다.
+    """
+    candidates = [key] + (env_fallbacks or [])
+
+    if _has_streamlit_secrets():
+        try:
+            if section:
+                sec_obj = None
+                try:
+                    if section in st.secrets:
+                        sec_obj = st.secrets[section]
+                except Exception:
+                    sec_obj = None
+
+                if sec_obj is None:
+                    sec_val, sec_name = _read_from_mapping(st.secrets, [section])
+                    if isinstance(sec_val, Mapping) or hasattr(sec_val, "keys"):
+                        sec_obj = sec_val
+                        section_used = sec_name or section
+                    else:
+                        section_used = section
+                else:
+                    section_used = section
+
+                if sec_obj is not None:
+                    val, matched = _read_from_mapping(sec_obj, candidates)
+                    if val not in (None, ""):
+                        return val, f'st.secrets["{section_used}"]["{matched}"]'
+
+            val, matched = _read_from_mapping(st.secrets, candidates)
+            if val not in (None, "") and not isinstance(val, Mapping):
+                return val, f'st.secrets["{matched}"]'
+        except Exception:
+            pass
+
+    for cand in candidates:
+        env_val = _clean_secret_value(os.getenv(cand))
+        if env_val not in (None, ""):
+            return env_val, f'env:{cand}'
+
+    return default, "미설정"
 
 
 def get_secret(
@@ -47,45 +146,13 @@ def get_secret(
     2순위: 로컬 `.env` 및 OS 환경변수(`os.getenv`)에서 읽어옵니다.
     3순위: 모두 없으면 `default`를 반환합니다.
     """
-    if _has_streamlit_secrets():
-        try:
-            if section and section in st.secrets:
-                sec_obj = st.secrets[section]
-                if hasattr(sec_obj, "__contains__"):
-                    if key in sec_obj and sec_obj[key] not in (None, ""):
-                        return sec_obj[key]
-                    lower_key = key.lower()
-                    if lower_key in sec_obj and sec_obj[lower_key] not in (None, ""):
-                        return sec_obj[lower_key]
-
-            if key in st.secrets and st.secrets[key] not in (None, ""):
-                return st.secrets[key]
-
-            if env_fallbacks:
-                for alt_key in env_fallbacks:
-                    if section and section in st.secrets:
-                        sec_obj = st.secrets[section]
-                        if hasattr(sec_obj, "__contains__"):
-                            if alt_key in sec_obj and sec_obj[alt_key] not in (None, ""):
-                                return sec_obj[alt_key]
-                            if alt_key.lower() in sec_obj and sec_obj[alt_key.lower()] not in (None, ""):
-                                return sec_obj[alt_key.lower()]
-                    if alt_key in st.secrets and st.secrets[alt_key] not in (None, ""):
-                        return st.secrets[alt_key]
-        except Exception:
-            pass
-
-    val = os.getenv(key)
-    if val not in (None, ""):
-        return val
-
-    if env_fallbacks:
-        for alt_key in env_fallbacks:
-            alt_val = os.getenv(alt_key)
-            if alt_val not in (None, ""):
-                return alt_val
-
-    return default
+    val, _ = get_secret_with_source(
+        key=key,
+        default=default,
+        section=section,
+        env_fallbacks=env_fallbacks,
+    )
+    return val
 
 
 def get_secret_section(section: str) -> Optional[Dict[str, Any]]:
@@ -238,6 +305,39 @@ def get_gemini_api_key() -> str:
             env_fallbacks=["VITE_GEMINI_API_KEY", "GOOGLE_API_KEY", "api_key"],
         )
     ).strip()
+
+
+def get_sheets_secrets_diagnostics() -> Dict[str, str]:
+    """
+    `PORTFOLIO_API_URL`과 `API_TOKEN`이 `st.secrets["sheets"]`, 최상위 `st.secrets`, `.env` 중
+    어디서 읽혔는지 마스킹된 요약 정보와 함께 반환합니다 (비밀 값 자체는 노출하지 않음).
+    """
+    url_val, url_src = get_secret_with_source(
+        "PORTFOLIO_API_URL",
+        default="",
+        section="sheets",
+        env_fallbacks=["VITE_PORTFOLIO_API_URL", "APPS_SCRIPT_URL"],
+    )
+    token_val, token_src = get_secret_with_source(
+        "API_TOKEN",
+        default="",
+        section="sheets",
+        env_fallbacks=["SHEETS_API_TOKEN", "PORTFOLIO_API_TOKEN"],
+    )
+    url_str = str(url_val or "").strip()
+    if url_str.startswith("http"):
+        parts = url_str.split("/")
+        masked_url = "/".join(parts[:4]) + "/.../" + (parts[-1] if len(parts) > 4 else "")
+    else:
+        masked_url = "미설정" if not url_str else "(잘못된 URL 형식)"
+
+    return {
+        "url_source": url_src,
+        "url_masked": masked_url,
+        "url_configured": "OK" if url_str.startswith("http") else "MISSING",
+        "token_source": token_src,
+        "token_configured": "OK" if str(token_val or "").strip() else "MISSING",
+    }
 
 
 def get_sheets_config() -> Dict[str, str]:

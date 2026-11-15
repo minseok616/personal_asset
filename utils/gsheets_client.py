@@ -23,7 +23,11 @@ import requests
 import streamlit as st
 from google.oauth2.service_account import Credentials
 
-from utils.secrets_helper import get_secret_section, get_sheets_config
+from utils.secrets_helper import (
+    get_secret_section,
+    get_sheets_config,
+    get_sheets_secrets_diagnostics,
+)
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -215,11 +219,22 @@ def post_sheet_write_action(
         resp = requests.post(
             api_url,
             json=payload,
-            headers={"Content-Type": "application/json; charset=utf-8"},
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "User-Agent": "AssetVision-Streamlit/1.0",
+            },
             allow_redirects=True,
-            timeout=25,
+            timeout=(10, 25),
         )
         resp.raise_for_status()
+
+        raw_text = (resp.text or "").lstrip()
+        if "text/html" in (resp.headers.get("Content-Type") or "").lower() or raw_text.startswith("<!DOCTYPE") or raw_text.startswith("<html"):
+            return (
+                False,
+                "구글 시트 저장 실패: Apps Script가 JSON 대신 HTML 페이지를 반환했습니다. 웹앱 배포 액세스 권한('모든 사용자')을 확인해 주세요.",
+                {"rawText": raw_text[:200]},
+            )
 
         resp_json: Dict[str, Any] = {}
         try:
@@ -288,41 +303,149 @@ def _read_records_from_gspread(client: gspread.Client) -> Optional[Dict[str, Any
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_portfolio_raw_payload() -> Tuple[Dict[str, Any], str]:
+def _fetch_apps_script_json_cached(api_url: str) -> Dict[str, Any]:
     """
-    5분(300초) TTL로 캐싱되는 포트폴리오 데이터 로더입니다.
-    1순위: `PORTFOLIO_API_URL` (Apps Script JSON API) 호출
+    Google Apps Script 웹앱(`doGet`) 호출 및 JSON 파싱 전용 캐시 헬퍼 (성공 응답만 300초 캐싱).
+    302 리다이렉트(`script.googleusercontent.com`)와 콜드 스타트 지연을 고려해
+    `allow_redirects=True`, `timeout=(10, 25)`을 적용하며, 실패 시 예외를 발생시켜 오류를 캐싱하지 않습니다.
+    """
+    try:
+        resp = requests.get(
+            api_url,
+            timeout=(10, 25),
+            allow_redirects=True,
+            headers={
+                "Accept": "application/json, text/plain, */*",
+                "User-Agent": "AssetVision-Streamlit/1.0",
+            },
+        )
+    except requests.exceptions.Timeout as exc:
+        raise RuntimeError(f"[Apps Script HTTP 요청 타임아웃(25초 초과)] {exc}") from exc
+    except requests.exceptions.RequestException as exc:
+        raise RuntimeError(f"[Apps Script HTTP 연결/리다이렉트 오류] {exc}") from exc
+
+    if resp.status_code >= 400:
+        snippet = (resp.text or "").strip().replace("\n", " ")[:180]
+        raise RuntimeError(
+            f"[Apps Script HTTP {resp.status_code} 오류] 최종 URL 호스트: {resp.url.split('/')[2] if '/' in resp.url else resp.url} | 응답: {snippet}"
+        )
+
+    content_type = (resp.headers.get("Content-Type") or "").lower()
+    raw_text = (resp.text or "").lstrip()
+    if "text/html" in content_type or raw_text.startswith("<!DOCTYPE") or raw_text.startswith("<html"):
+        final_host = resp.url.split("/")[2] if "://" in resp.url else "unknown"
+        raise RuntimeError(
+            f"[Apps Script JSON 대신 HTML 반환] 리다이렉트 호스트={final_host}. "
+            "Google Apps Script 웹앱 배포 설정에서 액세스 권한이 '모든 사용자(Anyone)'인지, 또는 로그인 페이지로 리다이렉트되지 않았는지 확인하세요."
+        )
+
+    try:
+        data = resp.json()
+    except Exception as exc:
+        snippet = raw_text.replace("\n", " ")[:180]
+        raise RuntimeError(
+            f"[doGet JSON 파싱 오류] {type(exc).__name__}: {exc} | 본문 미리보기: {snippet}"
+        ) from exc
+
+    if not isinstance(data, dict) or not data:
+        raise RuntimeError(
+            f"[doGet 응답 형식 오류] 최상위 JSON 객체(dict)가 아니거나 비어 있습니다. (수신 타입: {type(data).__name__})"
+        )
+
+    if data.get("result") == "error" or (data.get("error") and len(data) <= 3):
+        err_detail = data.get("message") or data.get("error") or str(data)
+        raise RuntimeError(f"[Apps Script doGet 에러 응답] {err_detail}")
+
+    return data
+
+
+def fetch_portfolio_raw_payload_with_diagnostics() -> Tuple[Dict[str, Any], str, Dict[str, Any]]:
+    """
+    포트폴리오 데이터 로더 + 상세 진단 정보 반환 함수입니다.
+    1순위: `PORTFOLIO_API_URL` (Apps Script `doGet`, 302 리다이렉트 지원 & 타임아웃 25초)
     2순위: `gspread` 서비스 계정(`st.secrets["gcp_service_account"]` 또는 로컬 JSON) 직접 조회
-    3순위: 안전한 내장 폴백 데이터 반환
+    3순위: 안전한 내장 폴백 데이터 반환 + 정확한 실패 단계/예외 메시지 기록
     """
     sheets_cfg = get_sheets_config()
+    secrets_diag = get_sheets_secrets_diagnostics()
     api_url = sheets_cfg.get("portfolio_api_url", "")
 
-    if api_url:
+    diagnostics: Dict[str, Any] = {
+        "secrets": secrets_diag,
+        "failed_stage": None,
+        "error_message": "",
+        "gspread_error": "",
+        "empty_sections": [],
+    }
+
+    if not api_url:
+        diagnostics["failed_stage"] = "Secrets 조회 (PORTFOLIO_API_URL 미설정)"
+        diagnostics["error_message"] = (
+            'st.secrets["sheets"]["PORTFOLIO_API_URL"] / st.secrets["PORTFOLIO_API_URL"] / .env 모두에서 '
+            "PORTFOLIO_API_URL 값을 찾지 못했습니다."
+        )
+    elif not api_url.startswith("http"):
+        diagnostics["failed_stage"] = "Secrets 검증 (PORTFOLIO_API_URL 형식 오류)"
+        diagnostics["error_message"] = (
+            f"PORTFOLIO_API_URL이 'http'로 시작하지 않습니다 (출처: {secrets_diag.get('url_source')})."
+        )
+    else:
         try:
-            resp = requests.get(api_url, timeout=25, headers={"Accept": "application/json"})
-            resp.raise_for_status()
-            data = resp.json()
-            if isinstance(data, dict) and data:
-                client, auth_label = get_gspread_client()
-                if client is not None:
+            data = _fetch_apps_script_json_cached(api_url)
+            expected_keys = [
+                "summary",
+                "manualCashAccounts",
+                "savings",
+                "bonds",
+                "physicalAssets",
+                "kisRealtime",
+                "kisTrades",
+                "kisDividends",
+            ]
+            empty_secs = [k for k in expected_keys if not data.get(k)]
+            diagnostics["empty_sections"] = empty_secs
+
+            client, auth_label = get_gspread_client()
+            if client is not None:
+                try:
                     gspread_data = _read_records_from_gspread(client)
                     if gspread_data:
                         for k, v in gspread_data.items():
                             if k not in data or not data.get(k):
                                 data[k] = v
-                        return data, f"Apps Script Live + {auth_label}"
-                return data, "Google Sheets Apps Script API (Live)"
-        except Exception:
-            pass
+                        diagnostics["empty_sections"] = [k for k in expected_keys if not data.get(k)]
+                        return data, f"Apps Script Live + {auth_label}", diagnostics
+                except Exception as g_exc:
+                    diagnostics["gspread_error"] = f"{type(g_exc).__name__}: {g_exc}"
+
+            return data, "Google Sheets Apps Script API (Live)", diagnostics
+        except Exception as exc:
+            diagnostics["failed_stage"] = "Apps Script doGet 호출/JSON 파싱"
+            diagnostics["error_message"] = f"{type(exc).__name__}: {exc}"
 
     client, auth_label = get_gspread_client()
     if client is not None:
-        gspread_data = _read_records_from_gspread(client)
-        if gspread_data:
-            return gspread_data, f"gspread Direct ({auth_label})"
+        try:
+            gspread_data = _read_records_from_gspread(client)
+            if gspread_data:
+                return gspread_data, f"gspread Direct ({auth_label})", diagnostics
+            diagnostics["gspread_error"] = f"시트를 열었으나 레코드가 비어 있습니다 ({auth_label})."
+        except Exception as g_exc:
+            diagnostics["gspread_error"] = f"{type(g_exc).__name__}: {g_exc}"
+    else:
+        diagnostics["gspread_error"] = auth_label
 
-    return get_default_fallback_payload(), "Fallback Snapshot (오프라인 안전 모드)"
+    return (
+        get_default_fallback_payload(),
+        "Fallback Snapshot (오프라인 안전 모드)",
+        diagnostics,
+    )
+
+
+def fetch_portfolio_raw_payload() -> Tuple[Dict[str, Any], str]:
+    """기존 호환용 래퍼: `(raw_payload, data_source_label)`을 반환합니다."""
+    data, label, _ = fetch_portfolio_raw_payload_with_diagnostics()
+    return data, label
 
 
 def get_default_fallback_payload() -> Dict[str, Any]:

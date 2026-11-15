@@ -31,6 +31,7 @@ from utils.gsheets_client import (
     SHEET_EDITABLE_COL_INDICES,
     SHEET_FORMULA_COL_INDICES,
     fetch_portfolio_raw_payload,
+    fetch_portfolio_raw_payload_with_diagnostics,
     get_gspread_client,
     post_sheet_write_action,
 )
@@ -506,10 +507,16 @@ def classify_underlying_asset(row: Dict[str, Any]) -> str:
 if "sheet_overrides" not in st.session_state:
     st.session_state["sheet_overrides"] = {}
 
-raw_payload_fetched, data_source_label = fetch_portfolio_raw_payload()
-raw_payload = dict(raw_payload_fetched)
+raw_payload_fetched, data_source_label, fetch_diagnostics = (
+    fetch_portfolio_raw_payload_with_diagnostics()
+)
+raw_payload: Dict[str, Any] = (
+    dict(raw_payload_fetched) if isinstance(raw_payload_fetched, dict) else {}
+)
 for k_ov, v_ov in st.session_state["sheet_overrides"].items():
     raw_payload[k_ov] = v_ov
+
+section_warnings: List[str] = []
 
 _, gspread_status = get_gspread_client()
 kis_token, kis_token_status = get_kis_access_token()
@@ -518,9 +525,12 @@ configured_kis_accounts = get_configured_kis_accounts()
 
 # KIS 4대 계좌(위탁, ISA, 연금저축, IRP) 직접 조회 설정 시 실시간 잔고 보강 (읽기 전용)
 if kis_token and configured_kis_accounts and not raw_payload.get("kisRealtime"):
-    direct_rows = fetch_all_kis_accounts_balance()
-    if direct_rows:
-        raw_payload["kisRealtime"] = direct_rows
+    try:
+        direct_rows = fetch_all_kis_accounts_balance()
+        if direct_rows:
+            raw_payload["kisRealtime"] = direct_rows
+    except Exception as kis_exc:
+        section_warnings.append(f"[KIS OpenAPI 실시간 잔고 조회] {type(kis_exc).__name__}: {kis_exc}")
 
 summary_raw_obj = raw_payload.get("summary")
 summary_raw: Dict[str, Any] = summary_raw_obj if isinstance(summary_raw_obj, dict) else {}
@@ -530,8 +540,8 @@ if isinstance(integrated_raw_obj, dict):
     integrated_raw: Dict[str, Any] = integrated_raw_obj
 elif isinstance(integrated_raw_obj, list):
     integrated_raw = {
-        str(r.get("항목") or r.get("구분") or r.get("key") or idx): (
-            r.get("금액") or r.get("값") or r.get("value")
+        str(r.get("항목") or r.get("구분") or r.get("자산 대분류") or r.get("key") or idx): (
+            r.get("금액") or r.get("평가금액 (KRW)") or r.get("값") or r.get("value")
         )
         for idx, r in enumerate(integrated_raw_obj)
         if isinstance(r, dict)
@@ -574,25 +584,29 @@ raw_checking_candidates = (
     or []
 )
 checking_rows: List[Dict[str, Any]] = []
-for r in raw_checking_candidates:
-    if not isinstance(r, dict):
-        continue
-    row_sum = sum(to_num(r.get(col), 0) for col in CHECKING_ACCOUNT_COLS)
-    date_str = fmt_date_kst(r.get("날짜"))
-    if not date_str and row_sum <= 0 and to_num(r.get("총합계"), 0) <= 0:
-        continue
-    checking_rows.append(
-        {
-            "날짜": date_str or date.today().isoformat(),
-            "총합계": row_sum if row_sum > 0 else to_num(r.get("총합계"), 0),
-            "주거래 하나 통장": to_num(r.get("주거래 하나 통장") or r.get("하나은행"), 0),
-            "토스뱅크 통장": to_num(r.get("토스뱅크 통장") or r.get("토스뱅크"), 0),
-            "미래에셋 종합_CMA": to_num(r.get("미래에셋 종합_CMA") or r.get("CMA"), 0),
-            "보유 현금": to_num(r.get("보유 현금") or r.get("보유현금"), 0),
-            "증여금": to_num(r.get("증여금"), 0),
-            "청년도약계좌 정부기여금": to_num(r.get("청년도약계좌 정부기여금") or r.get("정부기여금"), 0),
-        }
-    )
+try:
+    if isinstance(raw_checking_candidates, list):
+        for r in raw_checking_candidates:
+            if not isinstance(r, dict):
+                continue
+            row_sum = sum(to_num(r.get(col), 0) for col in CHECKING_ACCOUNT_COLS)
+            date_str = fmt_date_kst(r.get("날짜"))
+            if not date_str and row_sum <= 0 and to_num(r.get("총합계"), 0) <= 0:
+                continue
+            checking_rows.append(
+                {
+                    "날짜": date_str or date.today().isoformat(),
+                    "총합계": row_sum if row_sum > 0 else to_num(r.get("총합계"), 0),
+                    "주거래 하나 통장": to_num(r.get("주거래 하나 통장") or r.get("하나은행"), 0),
+                    "토스뱅크 통장": to_num(r.get("토스뱅크 통장") or r.get("토스뱅크"), 0),
+                    "미래에셋 종합_CMA": to_num(r.get("미래에셋 종합_CMA") or r.get("CMA"), 0),
+                    "보유 현금": to_num(r.get("보유 현금") or r.get("보유현금"), 0),
+                    "증여금": to_num(r.get("증여금"), 0),
+                    "청년도약계좌 정부기여금": to_num(r.get("청년도약계좌 정부기여금") or r.get("정부기여금"), 0),
+                }
+            )
+except Exception as chk_exc:
+    section_warnings.append(f"[💰입출금통장 파싱] {type(chk_exc).__name__}: {chk_exc}")
 
 if not checking_rows:
     checking_rows = [
@@ -625,32 +639,36 @@ manual_cash_rows: List[Dict[str, Any]] = [
 # 2) 🌱예적금내역 (savings — A~H열 입력, I~N열 수식 보존)
 raw_savings_candidates = raw_payload.get("savings") or []
 savings_rows: List[Dict[str, Any]] = []
-for r in raw_savings_candidates:
-    if not isinstance(r, dict):
-        continue
-    bank = str(r.get("은행") or "").strip()
-    cat = str(r.get("구분") or "").strip()
-    if not bank and not cat:
-        continue
-    raw_rate = to_num(r.get("이율"), 0.0)
-    savings_rows.append(
-        {
-            "구분": cat or "적금",
-            "은행": bank,
-            "가입일": fmt_date_kst(r.get("가입일")),
-            "이율": raw_rate,
-            "기간": int(to_num(r.get("기간"), 12)),
-            "금액": to_num(r.get("금액"), 0),
-            "비과세": str(r.get("비과세") or "").strip(),
-            "통화": str(r.get("통화") or "KRW").strip(),
-            "만기수령액(세전)": round(to_num(r.get("만기수령액(세전)"), 0)),
-            "만기수령액(세후)": round(to_num(r.get("만기수령액(세후)"), 0)),
-            "ID": str(r.get("ID") or "").strip(),
-            "만기일": fmt_date_kst(r.get("만기일")),
-            "환율": to_num(r.get("환율"), 1.0),
-            "만기수령액(통화)": round(to_num(r.get("만기수령액(통화)"), 0), 2),
-        }
-    )
+try:
+    if isinstance(raw_savings_candidates, list):
+        for r in raw_savings_candidates:
+            if not isinstance(r, dict):
+                continue
+            bank = str(r.get("은행") or "").strip()
+            cat = str(r.get("구분") or "").strip()
+            if not bank and not cat:
+                continue
+            raw_rate = to_num(r.get("이율"), 0.0)
+            savings_rows.append(
+                {
+                    "구분": cat or "적금",
+                    "은행": bank,
+                    "가입일": fmt_date_kst(r.get("가입일")),
+                    "이율": raw_rate,
+                    "기간": int(to_num(r.get("기간"), 12)),
+                    "금액": to_num(r.get("금액"), 0),
+                    "비과세": str(r.get("비과세") or "").strip(),
+                    "통화": str(r.get("통화") or "KRW").strip(),
+                    "만기수령액(세전)": round(to_num(r.get("만기수령액(세전)"), 0)),
+                    "만기수령액(세후)": round(to_num(r.get("만기수령액(세후)"), 0)),
+                    "ID": str(r.get("ID") or "").strip(),
+                    "만기일": fmt_date_kst(r.get("만기일")),
+                    "환율": to_num(r.get("환율"), 1.0),
+                    "만기수령액(통화)": round(to_num(r.get("만기수령액(통화)"), 0), 2),
+                }
+            )
+except Exception as sav_exc:
+    section_warnings.append(f"[🌱예적금내역 파싱] {type(sav_exc).__name__}: {sav_exc}")
 
 if not savings_rows:
     savings_rows = [
@@ -678,23 +696,27 @@ savings_total_krw = raw_sav_summary if raw_sav_summary >= 5_000_000 else 44_130_
 # 3) 🏠채권내역 (bonds — A~E열 입력, F~G열 수식 보존)
 raw_bonds_candidates = raw_payload.get("bonds") or []
 bonds_rows: List[Dict[str, Any]] = []
-for r in raw_bonds_candidates:
-    if not isinstance(r, dict):
-        continue
-    b_name = str(r.get("채권명") or "").strip()
-    if not b_name and to_num(r.get("총 납입액"), 0) <= 0:
-        continue
-    bonds_rows.append(
-        {
-            "채권명": b_name,
-            "설명": str(r.get("설명") or "").strip(),
-            "가입일": fmt_date_kst(r.get("가입일")),
-            "종료일": fmt_date_kst(r.get("종료일")),
-            "월 납입금액": to_num(r.get("월 납입금액"), 0),
-            "수령": str(r.get("수령") or "").strip(),
-            "총 납입액": to_num(r.get("총 납입액"), 0),
-        }
-    )
+try:
+    if isinstance(raw_bonds_candidates, list):
+        for r in raw_bonds_candidates:
+            if not isinstance(r, dict):
+                continue
+            b_name = str(r.get("채권명") or "").strip()
+            if not b_name and to_num(r.get("총 납입액"), 0) <= 0:
+                continue
+            bonds_rows.append(
+                {
+                    "채권명": b_name,
+                    "설명": str(r.get("설명") or "").strip(),
+                    "가입일": fmt_date_kst(r.get("가입일")),
+                    "종료일": fmt_date_kst(r.get("종료일")),
+                    "월 납입금액": to_num(r.get("월 납입금액"), 0),
+                    "수령": str(r.get("수령") or "").strip(),
+                    "총 납입액": to_num(r.get("총 납입액"), 0),
+                }
+            )
+except Exception as bnd_exc:
+    section_warnings.append(f"[🏠채권내역 파싱] {type(bnd_exc).__name__}: {bnd_exc}")
 
 if not bonds_rows:
     bonds_rows = [
@@ -716,48 +738,52 @@ bond_direct_krw = sum(to_num(b.get("총 납입액"), 0) for b in bonds_rows) or 
 # 4) 🚗실물_기타자산 (physicalAssets — 시트 병합 타이틀/합계 행 자동 감지 및 정규화)
 raw_phys_candidates = raw_payload.get("physicalAssets") or []
 physical_rows: List[Dict[str, Any]] = []
-for r in raw_phys_candidates:
-    if not isinstance(r, dict):
-        continue
-    cat_raw = str(r.get("자산구분") or r.get("카테고리") or "기타실물").strip()
-    name = str(r.get("자산명") or r.get("품목명(모델명)") or r.get("품목") or r.get("항목명") or "").strip()
-    if not name or cat_raw == "합계" or "실물자산 총" in name:
-        continue
-    cur_val = to_num(
-        r.get("현재평가액(원)") or r.get("현재가치") or r.get("현재잔존가치(원)") or r.get("현재추정가치") or r.get("잔존가치"),
-        0,
-    )
-    if cur_val <= 0:
-        continue
-    purchase_val = to_num(r.get("취득원가(원)") or r.get("취득원가"), 0)
-    accum_dep = to_num(r.get("감가상각누계액(원)") or r.get("감가상각누계액"), 0)
-    years_val = r.get("내용연수(년)", "-")
-    res_ratio = to_num(r.get("잔존가치율"), 0)
-    if to_num(years_val, 0) > 0:
-        est_rate = round(((1 - (res_ratio / 100.0 if res_ratio > 1 else res_ratio)) / to_num(years_val, 1)) * 100)
-    else:
-        est_rate = to_num(r.get("연감가율(%)") or r.get("연간상각률") or r.get("연감가율"), 0)
-    physical_rows.append(
-        {
-            "자산구분": cat_raw,
-            "카테고리": cat_raw,
-            "자산명": name,
-            "취득일": fmt_date_kst(r.get("취득일") or r.get("취득일자")),
-            "취득원가(원)": purchase_val,
-            "취득원가": purchase_val,
-            "내용연수(년)": years_val,
-            "잔존가치율": res_ratio,
-            "감가상각방법": str(r.get("감가상각방법") or "정액법").strip(),
-            "경과월수(개월)": r.get("경과월수(개월)", "-"),
-            "연감가율(%)": est_rate,
-            "감가상각누계액(원)": accum_dep,
-            "감가상각누계액": accum_dep,
-            "현재평가액(원)": cur_val,
-            "현재가치": cur_val,
-            "비고 및 감가상각 설명": str(r.get("비고 및 감가상각 설명") or r.get("비고") or "").strip(),
-            "비고": str(r.get("비고 및 감가상각 설명") or r.get("비고") or "").strip(),
-        }
-    )
+try:
+    if isinstance(raw_phys_candidates, list):
+        for r in raw_phys_candidates:
+            if not isinstance(r, dict):
+                continue
+            cat_raw = str(r.get("자산구분") or r.get("카테고리") or "기타실물").strip()
+            name = str(r.get("자산명") or r.get("품목명(모델명)") or r.get("품목") or r.get("항목명") or "").strip()
+            if not name or cat_raw == "합계" or "실물자산 총" in name:
+                continue
+            cur_val = to_num(
+                r.get("현재평가액(원)") or r.get("현재가치") or r.get("현재잔존가치(원)") or r.get("현재추정가치") or r.get("잔존가치"),
+                0,
+            )
+            if cur_val <= 0:
+                continue
+            purchase_val = to_num(r.get("취득원가(원)") or r.get("취득원가"), 0)
+            accum_dep = to_num(r.get("감가상각누계액(원)") or r.get("감가상각누계액"), 0)
+            years_val = r.get("내용연수(년)", "-")
+            res_ratio = to_num(r.get("잔존가치율"), 0)
+            if to_num(years_val, 0) > 0:
+                est_rate = round(((1 - (res_ratio / 100.0 if res_ratio > 1 else res_ratio)) / to_num(years_val, 1)) * 100)
+            else:
+                est_rate = to_num(r.get("연감가율(%)") or r.get("연간상각률") or r.get("연감가율"), 0)
+            physical_rows.append(
+                {
+                    "자산구분": cat_raw,
+                    "카테고리": cat_raw,
+                    "자산명": name,
+                    "취득일": fmt_date_kst(r.get("취득일") or r.get("취득일자")),
+                    "취득원가(원)": purchase_val,
+                    "취득원가": purchase_val,
+                    "내용연수(년)": years_val,
+                    "잔존가치율": res_ratio,
+                    "감가상각방법": str(r.get("감가상각방법") or "정액법").strip(),
+                    "경과월수(개월)": r.get("경과월수(개월)", "-"),
+                    "연감가율(%)": est_rate,
+                    "감가상각누계액(원)": accum_dep,
+                    "감가상각누계액": accum_dep,
+                    "현재평가액(원)": cur_val,
+                    "현재가치": cur_val,
+                    "비고 및 감가상각 설명": str(r.get("비고 및 감가상각 설명") or r.get("비고") or "").strip(),
+                    "비고": str(r.get("비고 및 감가상각 설명") or r.get("비고") or "").strip(),
+                }
+            )
+except Exception as phys_exc:
+    section_warnings.append(f"[🚗실물_기타자산 파싱] {type(phys_exc).__name__}: {phys_exc}")
 
 if not physical_rows:
     physical_rows = [
@@ -825,38 +851,44 @@ physical_total_krw = sum(to_num(r.get("현재평가액(원)") or r.get("현재�
 # ---------------------------------------------------------------------------
 # 4-B. KIS 실시간 잔고 분리 (읽기 전용: 현금성 예수금 vs 투자 종목)
 # ---------------------------------------------------------------------------
-kis_rows: List[Dict[str, Any]] = raw_payload.get("kisRealtime") or []
+kis_rows_raw = raw_payload.get("kisRealtime") or []
+kis_rows: List[Dict[str, Any]] = kis_rows_raw if isinstance(kis_rows_raw, list) else []
 cash_deposit_rows: List[Dict[str, Any]] = []
 stock_holding_rows: List[Dict[str, Any]] = []
 
-for r in kis_rows:
-    code = str(r.get("종목코드", "")).strip()
-    name = str(r.get("종목명", "")).strip()
-    if not code and not name:
-        continue
-    if "조회오류" in name:
-        continue
-    underlying_cls = classify_underlying_asset(r)
-    item = dict(r)
-    item["실질자산분류"] = underlying_cls
-    item["보유수량_num"] = to_num(r.get("보유수량"), 0)
-    item["매수평단가_num"] = to_num(r.get("매수평단가") or r.get("매입평균가"), 0)
-    item["현재가_num"] = to_num(r.get("현재가"), 0)
-    raw_eval = to_num(r.get("평가금액") or r.get("예수금"), 0)
-    is_usd_cash = code.upper().startswith("CASH_USD") or ("달러" in name and code.upper().startswith("CASH_"))
-    if is_usd_cash and raw_eval < 500_000:
-        item["평가금액_num"] = raw_eval * usd_krw_rate
-        item["외화원금_usd"] = raw_eval
-    else:
-        item["평가금액_num"] = raw_eval
-        item["외화원금_usd"] = raw_eval / usd_krw_rate if is_usd_cash else 0.0
-    item["평가손익_num"] = to_num(r.get("평가손익"), 0)
-    item["수익률_num"] = to_num(r.get("수익률(%)"), 0)
+try:
+    for r in kis_rows:
+        if not isinstance(r, dict):
+            continue
+        code = str(r.get("종목코드", "")).strip()
+        name = str(r.get("종목명", "")).strip()
+        if not code and not name:
+            continue
+        if "조회오류" in name:
+            continue
+        underlying_cls = classify_underlying_asset(r)
+        item = dict(r)
+        item["실질자산분류"] = underlying_cls
+        item["보유수량_num"] = to_num(r.get("보유수량"), 0)
+        item["매수평단가_num"] = to_num(r.get("매수평단가") or r.get("매입평균가"), 0)
+        item["현재가_num"] = to_num(r.get("현재가"), 0)
+        raw_eval = to_num(r.get("평가금액") or r.get("예수금"), 0)
+        is_usd_cash = code.upper().startswith("CASH_USD") or ("달러" in name and code.upper().startswith("CASH_"))
+        if is_usd_cash and raw_eval < 500_000:
+            item["평가금액_num"] = raw_eval * usd_krw_rate
+            item["외화원금_usd"] = raw_eval
+        else:
+            item["평가금액_num"] = raw_eval
+            item["외화원금_usd"] = raw_eval / usd_krw_rate if is_usd_cash else 0.0
+        item["평가손익_num"] = to_num(r.get("평가손익"), 0)
+        item["수익률_num"] = to_num(r.get("수익률(%)"), 0)
 
-    if code.upper().startswith("CASH_") or underlying_cls == "현금성 자산":
-        cash_deposit_rows.append(item)
-    else:
-        stock_holding_rows.append(item)
+        if code.upper().startswith("CASH_") or underlying_cls == "현금성 자산":
+            cash_deposit_rows.append(item)
+        else:
+            stock_holding_rows.append(item)
+except Exception as kis_parse_exc:
+    section_warnings.append(f"[💾KIS_실시간잔고 파싱] {type(kis_parse_exc).__name__}: {kis_parse_exc}")
 
 usd_deposit_krw = sum(c["평가금액_num"] for c in cash_deposit_rows) or 27_149_048
 usd_deposit_usd = usd_deposit_krw / usd_krw_rate
@@ -937,6 +969,35 @@ with top_col2:
             st.session_state["sheet_overrides"] = {}
             st.cache_data.clear()
             st.rerun()
+
+# ---------------------------------------------------------------------------
+# 5-B. 데이터 로드 예외 및 부분 파싱 경고 상단 노출 (원인 숨김 방지)
+# ---------------------------------------------------------------------------
+_sec_diag = fetch_diagnostics.get("secrets", {}) if isinstance(fetch_diagnostics, dict) else {}
+_failed_stage = fetch_diagnostics.get("failed_stage") if isinstance(fetch_diagnostics, dict) else None
+_error_msg = fetch_diagnostics.get("error_message") if isinstance(fetch_diagnostics, dict) else ""
+_gspread_err = fetch_diagnostics.get("gspread_error") if isinstance(fetch_diagnostics, dict) else ""
+
+if "Fallback" in data_source_label or _failed_stage or _error_msg:
+    with st.container():
+        st.error(
+            f"**⚠️ 실시간 시트 연동 실패 — 오프라인 안전 모드(`{data_source_label}`)로 전환되었습니다.**\n\n"
+            f"- **실패 단계**: `{_failed_stage or '알 수 없음'}`\n"
+            f"- **예외 원인**: `{_error_msg or '상세 예외 정보 없음'}`\n"
+            f"- **Secrets 확인 (`PORTFOLIO_API_URL`)**: 출처=`{_sec_diag.get('url_source', '미확인')}`, "
+            f"상태=`{_sec_diag.get('url_configured', 'MISSING')}`, 대상=`{_sec_diag.get('url_masked', '-')}`\n"
+            f"- **Secrets 확인 (`API_TOKEN`)**: 출처=`{_sec_diag.get('token_source', '미확인')}`, "
+            f"상태=`{_sec_diag.get('token_configured', 'MISSING')}`\n"
+            f"- **gspread 대체 조회**: `{_gspread_err or '미사용'}`"
+        )
+        if st.button("🔁 캐시 초기화 후 실시간 시트 다시 연결", key="btn_retry_live_sync"):
+            st.cache_data.clear()
+            st.rerun()
+elif section_warnings:
+    st.warning(
+        "**⚠️ 일부 시트 항목 정규화 경고 (나머지 실시간 시트 데이터는 정상 반영됨):**\n\n"
+        + "\n".join(f"- {w}" for w in section_warnings)
+    )
 
 # ---------------------------------------------------------------------------
 # 6. 상단 4대 핵심 KPI 카드
@@ -1531,9 +1592,14 @@ with tabs[2]:
             "ID",
             "만기일",
         ]
+        sav_text_cols = ("구분", "은행", "가입일", "비과세", "통화", "ID", "만기일")
         for col in sav_cols:
             if col not in df_sav_init.columns:
-                df_sav_init[col] = "" if col in ("구분", "은행", "가입일", "비과세", "통화", "ID", "만기일") else 0
+                df_sav_init[col] = "" if col in sav_text_cols else 0
+            if col in sav_text_cols:
+                df_sav_init[col] = df_sav_init[col].fillna("").astype(str)
+            else:
+                df_sav_init[col] = pd.to_numeric(df_sav_init[col], errors="coerce").fillna(0)
         df_sav_init = df_sav_init[sav_cols]
 
         edited_sav_df = st.data_editor(
@@ -1591,9 +1657,14 @@ with tabs[2]:
 
         df_bond_init = pd.DataFrame(bonds_rows)
         bond_cols = ["채권명", "설명", "가입일", "종료일", "월 납입금액", "수령", "총 납입액"]
+        bond_text_cols = ("채권명", "설명", "가입일", "종료일", "수령")
         for col in bond_cols:
             if col not in df_bond_init.columns:
-                df_bond_init[col] = "" if col in ("채권명", "설명", "가입일", "종료일", "수령") else 0
+                df_bond_init[col] = "" if col in bond_text_cols else 0
+            if col in bond_text_cols:
+                df_bond_init[col] = df_bond_init[col].fillna("").astype(str)
+            else:
+                df_bond_init[col] = pd.to_numeric(df_bond_init[col], errors="coerce").fillna(0)
         df_bond_init = df_bond_init[bond_cols]
 
         edited_bond_df = st.data_editor(
@@ -1657,9 +1728,22 @@ with tabs[2]:
             "현재평가액(원)",
             "비고 및 감가상각 설명",
         ]
+        phys_text_cols = (
+            "자산구분",
+            "자산명",
+            "취득일",
+            "내용연수(년)",
+            "감가상각방법",
+            "경과월수(개월)",
+            "비고 및 감가상각 설명",
+        )
         for col in phys_cols:
             if col not in df_phys_init.columns:
-                df_phys_init[col] = "" if col in ("자산구분", "자산명", "취득일", "감가상각방법", "비고 및 감가상각 설명") else 0
+                df_phys_init[col] = "" if col in phys_text_cols else 0
+            if col in phys_text_cols:
+                df_phys_init[col] = df_phys_init[col].fillna("").astype(str)
+            else:
+                df_phys_init[col] = pd.to_numeric(df_phys_init[col], errors="coerce").fillna(0)
         df_phys_init = df_phys_init[phys_cols]
 
         edited_phys_df = st.data_editor(
@@ -1871,8 +1955,8 @@ with tabs[4]:
     bullish_list = [
         ("NVDA", "NVIDIA Corp.", "+94점", "Blackwell 서버 랙 출하 가속 및 하이퍼스케일러 AI CAPEX 상향"),
         ("AVGO", "Broadcom", "+91점", "맞춤형 AI ASIC(XPU) 수주 확대 및 VMware 현금흐름 개선"),
-        ("MSFT", "Microsoft (관심종목)", "+89점", "Azure AI 매출 성장률 34% 돌파 및 Copilot 엔터프라이즈 확산"),
         ("GOOGL", "Alphabet A", "+86점", "Gemini 검색 AI 광고 전환율 상승 및 클라우드 영업이익률 개선"),
+        ("META", "Meta Platforms", "+84점", "Llama 기반 광고 타겟팅 효율 상승 및 릴스 수익화 호조"),
         ("AMZN", "Amazon", "+82점", "AWS 영업이익률 역대 최고치 경신 및 물류 자동화 비용 절감"),
     ]
     bearish_list = [
