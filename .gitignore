@@ -1,0 +1,39 @@
+# ==========================================================
+# 1. Secrets & Credentials (절대 GitHub에 업로드 금지)
+# ==========================================================
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+*service_account*.json
+*credentials*.json
+*client_secret*.json
+*token*.json
+*.pem
+*.key
+
+# ==========================================================
+# 2. Python Virtual Environments & Cache
+# ==========================================================
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ==========================================================
+# 3. Node.js & Local Build / OS Files
+# ==========================================================
+node_modules/
+.vite/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+Desktop.ini
+AssetVision.exe
