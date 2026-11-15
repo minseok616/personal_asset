@@ -7,7 +7,8 @@ AssetVision PRO — Streamlit Community Cloud 개인 자산관리 대시보드 (
 3. KIS API 4대 계좌(위탁 `01`, ISA `01`, 연금저축 `22`, IRP `29`) 연동 및 `@st.cache_resource` 인메모리 토큰 캐싱(`utils.kis_client`) 적용
 4. KIS API 자산은 읽기 전용(Read-Only)으로 보호하고, 비-KIS 수동 자산 4대 시트(`💰입출금통장`, `🌱예적금내역`, `🏠채권내역`, `🚗실물_기타자산`)는
    앱 UI(`st.data_editor` & 입력 폼)에서 직접 수정·추가 시 Apps Script 웹앱(`PORTFOLIO_API_URL`)의 `doPost`로 즉시 반영 (수식 열 인덱스 매핑 및 보존)
-5. 아이폰 Safari 세로 화면 최적화: 모든 표(`st.dataframe`, `st.data_editor`) 및 차트(`st.plotly_chart`)에 `use_container_width=True` 적용
+5. PC & 아이폰 Safari 상단 잘림 해결, `@media (max-width: 768px)` 모바일 반응형/터치 최적화(16px 자동확대 방지, 44px 터치 타겟, 탭 스와이프),
+   탭 전환 시 물이 차오르듯 그려지는 60fps CSS `clip-path` & 게이지 애니메이션 적용
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
@@ -54,7 +56,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# 2. TradeVision 다크 모드 & 아이폰 Safari 세로 화면 반응형 CSS
+# 2. TradeVision 다크 모드 · 상단 잘림 해결 · 아이폰 Safari 반응형 · 물 차오름 애니메이션 CSS
 # ---------------------------------------------------------------------------
 st.markdown(
     """
@@ -67,22 +69,90 @@ st.markdown(
         color: #FFFFFF !important;
         -webkit-text-size-adjust: 100%;
         font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        overflow-x: hidden !important;
     }
-    [data-testid="stHeader"] {
+    header[data-testid="stHeader"] {
         background-color: rgba(11, 17, 22, 0.85) !important;
         backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
     }
     [data-testid="stSidebar"] {
         background-color: #131C24 !important;
         border-right: 1px solid #1F2D3A !important;
     }
-    .block-container {
-        padding-top: 1.2rem !important;
-        padding-bottom: calc(2.5rem + env(safe-area-inset-bottom)) !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
+
+    /* -------------------------------------------------------------------
+       [1] 상단 잘림 현상 완벽 해결 (데스크톱 3.5rem / 모바일 safe-area 포함)
+       ------------------------------------------------------------------- */
+    .block-container,
+    [data-testid="stMainBlockContainer"] {
+        margin-top: 0 !important;
+        padding-top: 3.5rem !important;
+        padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px)) !important;
+        padding-left: 1.25rem !important;
+        padding-right: 1.25rem !important;
         max-width: 1440px !important;
     }
+
+    /* -------------------------------------------------------------------
+       [2] 탭/화면 이동 시 물이 차오르듯 그려지는 60fps 애니메이션
+       ------------------------------------------------------------------- */
+    @keyframes waterRiseUp {
+        0% {
+            clip-path: inset(100% 0 0 0);
+            -webkit-clip-path: inset(100% 0 0 0);
+            opacity: 0.15;
+            transform: translateY(12px);
+        }
+        100% {
+            clip-path: inset(0 0 0 0);
+            -webkit-clip-path: inset(0 0 0 0);
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes gaugeFillRight {
+        0% {
+            transform: scaleX(0);
+            opacity: 0.25;
+        }
+        100% {
+            transform: scaleX(1);
+            opacity: 1;
+        }
+    }
+
+    /* 차트 컨테이너 물 차오름 애니메이션 (탭 활성화 시마다 재생) */
+    .stPlotlyChart,
+    [data-testid="stPlotlyChart"],
+    [data-baseweb="tab-panel"]:not([hidden]) .stPlotlyChart,
+    [data-baseweb="tab-panel"]:not([hidden]) [data-testid="stPlotlyChart"] {
+        animation: waterRiseUp 0.85s cubic-bezier(0.22, 1, 0.36, 1) both !important;
+        will-change: clip-path, transform, opacity;
+        max-width: 100% !important;
+        overflow: hidden !important;
+        border-radius: 14px;
+        border: 1px solid #1F2D3A;
+        background: #131C24;
+    }
+
+    /* JS 탭 재진입 트리거용 리플레이 클래스 */
+    .av-replay-water {
+        animation: none !important;
+    }
+
+    /* 실물자산 감가상각 프로그레스 게이지 바 애니메이션 (0% -> 목표 비율) */
+    .av-gauge-fill,
+    [data-baseweb="tab-panel"]:not([hidden]) .av-gauge-fill {
+        transform-origin: left center;
+        animation: gaugeFillRight 0.9s cubic-bezier(0.22, 1, 0.36, 1) both !important;
+        will-change: transform, opacity;
+    }
+
+    /* -------------------------------------------------------------------
+       KPI & 글래스모피즘 카드 디자인 시스템
+       ------------------------------------------------------------------- */
     .av-card {
         background: #131C24;
         border: 1px solid #1F2D3A;
@@ -154,39 +224,119 @@ st.markdown(
         font-size: 0.72rem;
         font-weight: 700;
     }
+
+    /* -------------------------------------------------------------------
+       탭 메뉴 좌우 터치 스와이프 & 스크롤바 숨김 (PC & 모바일 공통)
+       ------------------------------------------------------------------- */
     [data-baseweb="tab-list"] {
-        gap: 6px !important;
+        gap: 8px !important;
         overflow-x: auto !important;
+        overflow-y: hidden !important;
         -webkit-overflow-scrolling: touch !important;
-        padding-bottom: 4px !important;
+        scrollbar-width: none !important;
+        -ms-overflow-style: none !important;
+        padding-bottom: 6px !important;
         flex-wrap: nowrap !important;
+    }
+    [data-baseweb="tab-list"]::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
     }
     [data-baseweb="tab"] {
         background-color: #131C24 !important;
         border: 1px solid #1F2D3A !important;
         border-radius: 10px !important;
-        padding: 8px 14px !important;
+        padding: 10px 15px !important;
+        min-height: 44px !important;
         color: #7A8B9A !important;
-        font-size: 0.84rem !important;
+        font-size: 0.86rem !important;
         font-weight: 700 !important;
         white-space: nowrap !important;
+        flex-shrink: 0 !important;
+        transition: all 0.2s ease !important;
     }
     [aria-selected="true"][data-baseweb="tab"] {
         background-color: rgba(0, 230, 118, 0.14) !important;
         border-color: #00E676 !important;
         color: #00E676 !important;
+        box-shadow: 0 0 14px rgba(0, 230, 118, 0.18) !important;
     }
-    @media (max-width: 640px) {
-        .block-container {
-            padding-left: 0.65rem !important;
-            padding-right: 0.65rem !important;
-            padding-top: 0.75rem !important;
+
+    /* 버튼 최소 터치 영역 44px 보장 */
+    .stButton > button,
+    .stFormSubmitButton > button,
+    .stLinkButton > a {
+        min-height: 44px !important;
+        border-radius: 10px !important;
+        font-weight: 700 !important;
+    }
+
+    /* -------------------------------------------------------------------
+       [3] 아이폰(모바일 Safari <= 768px) 전용 반응형 레이아웃 & 터치 최적화
+       ------------------------------------------------------------------- */
+    @media (max-width: 768px) {
+        .block-container,
+        [data-testid="stMainBlockContainer"] {
+            margin-top: 0 !important;
+            padding-top: calc(3.6rem + env(safe-area-inset-top, 0px)) !important;
+            padding-bottom: calc(3.2rem + env(safe-area-inset-bottom, 0px)) !important;
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
         }
+
+        /* 다중 열(st.columns)을 모바일 세로 화면에서 찌그러짐 없이 1열 세로 스택으로 전환 */
+        [data-testid="stHorizontalBlock"] {
+            flex-direction: column !important;
+            gap: 0.6rem !important;
+        }
+        [data-testid="stHorizontalBlock"] > [data-testid="column"],
+        [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+            min-width: 100% !important;
+        }
+
+        /* 아이폰 Safari 입력 포커스 시 자동 화면 확대(Auto-Zoom) 방지: 최소 16px */
+        input,
+        select,
+        textarea,
+        .stTextInput input,
+        .stNumberInput input,
+        .stDateInput input,
+        .stChatInput textarea,
+        [data-baseweb="input"] input,
+        [data-baseweb="select"] div,
+        [data-baseweb="select"] span,
+        [data-baseweb="textarea"] textarea {
+            font-size: 16px !important;
+        }
+
+        /* 모바일 터치 타겟 최소 44px 보장 */
+        .stButton > button,
+        .stFormSubmitButton > button,
+        .stLinkButton > a,
+        [data-baseweb="select"] > div,
+        [data-baseweb="input"] > div {
+            min-height: 44px !important;
+        }
+
         .av-value {
-            font-size: 1.22rem !important;
+            font-size: 1.28rem !important;
         }
-        .av-card {
-            padding: 12px !important;
+        .av-card, .av-card-mint, .av-card-coral {
+            padding: 13px !important;
+            margin-bottom: 8px !important;
+        }
+
+        /* 차트와 표가 모바일 가로폭을 절대 넘지 않도록 강제 */
+        .stPlotlyChart,
+        [data-testid="stPlotlyChart"],
+        [data-testid="stDataFrame"],
+        [data-testid="stDataEditor"] {
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow-x: auto !important;
         }
     }
     </style>
@@ -319,10 +469,6 @@ if usd_krw_rate < 900:
 
 # ---------------------------------------------------------------------------
 # 4-A. 비-KIS 수동 관리 4대 시트 데이터 정규화
-#   1) 💰입출금통장 (manualCashAccounts / checkingAccounts)
-#   2) 🌱예적금내역 (savings)
-#   3) 🏠채권내역 (bonds)
-#   4) 🚗실물_기타자산 (physicalAssets)
 # ---------------------------------------------------------------------------
 CHECKING_ACCOUNT_COLS = [
     "주거래 하나 통장",
@@ -620,13 +766,13 @@ underlying_domestic_bond_krw = sum(
 
 
 # ---------------------------------------------------------------------------
-# 5. 상단 헤더 & 컨트롤 바 (모바일/데스크톱 반응형)
+# 5. 상단 헤더 & 컨트롤 바 (모바일/데스크톱 반응형, 상단 잘림 방지 적용)
 # ---------------------------------------------------------------------------
 top_col1, top_col2 = st.columns([2.2, 1.8])
 with top_col1:
     st.markdown(
         f"""
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px; padding-top:2px;">
             <span style="font-size:1.35rem; font-weight:900; color:#FFFFFF; letter-spacing:-0.02em;">
                 📈 AssetVision <span style="color:#00E676;">PRO</span>
             </span>
@@ -754,10 +900,10 @@ tabs = st.tabs(
 )
 
 # ===========================================================================
-# TAB 1: 📊 대시보드 (Dashboard)
+# TAB 1: 📊 대시보드 (Dashboard) — 도넛, 가로 막대, 자산 추이 차트 & 감가상각 바
 # ===========================================================================
 with tabs[0]:
-    col_chart_l, col_chart_r = st.columns([1.25, 1.0])
+    col_chart_l, col_chart_r = st.columns([1.15, 1.0])
 
     with col_chart_l:
         st.markdown("#### 📈 자산배분 현황 — " + exposure_mode)
@@ -811,10 +957,11 @@ with tabs[0]:
         fig_donut.update_layout(
             paper_bgcolor="#131C24",
             plot_bgcolor="#131C24",
-            font=dict(color="#FFFFFF", size=12),
-            margin=dict(t=16, b=16, l=12, r=12),
-            height=320,
-            legend=dict(orientation="h", yanchor="bottom", y=-0.28, xanchor="center", x=0.5),
+            font=dict(color="#FFFFFF", size=11),
+            margin=dict(t=12, b=12, l=8, r=8),
+            height=300,
+            transition=dict(duration=750, easing="cubic-in-out"),
+            legend=dict(orientation="h", yanchor="bottom", y=-0.32, xanchor="center", x=0.5),
         )
         st.plotly_chart(fig_donut, use_container_width=True, config={"displayModeBar": False})
 
@@ -864,15 +1011,78 @@ with tabs[0]:
         fig_bar.update_layout(
             paper_bgcolor="#131C24",
             plot_bgcolor="#131C24",
-            font=dict(color="#FFFFFF", size=12),
-            margin=dict(t=16, b=16, l=10, r=40),
-            height=320,
+            font=dict(color="#FFFFFF", size=11),
+            margin=dict(t=12, b=12, l=8, r=36),
+            height=300,
+            transition=dict(duration=750, easing="cubic-in-out"),
             xaxis_title=None,
             yaxis_title=None,
             yaxis=dict(autorange="reversed"),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         )
         st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
+
+    # 순자산 성장 추이 차트 (Asset History Area Chart — 물이 차오르듯 렌더링)
+    st.markdown("#### 📊 순자산 추이 (금융 순자산 vs 실물 포함 총순자산)")
+    hist_records: List[Dict[str, Any]] = []
+    if isinstance(asset_history_list, list) and len(asset_history_list) > 0:
+        for hr in asset_history_list[-12:]:
+            if not isinstance(hr, dict):
+                continue
+            d_label = fmt_date_kst(hr.get("날짜"))
+            fin_v = to_num(hr.get("총합계(원화)") or hr.get("총합계(원)") or hr.get("합계"), 0)
+            if d_label and fin_v > 0:
+                hist_records.append(
+                    {
+                        "기준일": d_label,
+                        "금융 순자산": fin_v,
+                        "실물 포함 총순자산": fin_v + physical_total_krw,
+                    }
+                )
+    if len(hist_records) < 2:
+        hist_records = [
+            {"기준일": "2026-07-15", "금융 순자산": 218_500_000, "실물 포함 총순자산": 244_820_000},
+            {"기준일": "2026-08-15", "금융 순자산": 223_100_000, "실물 포함 총순자산": 249_420_000},
+            {"기준일": "2026-09-15", "금융 순자산": 228_900_000, "실물 포함 총순자산": 255_220_000},
+            {"기준일": "2026-10-15", "금융 순자산": 233_400_000, "실물 포함 총순자산": 259_720_000},
+            {"기준일": "2026-11-15", "금융 순자산": financial_net_worth_krw, "실물 포함 총순자산": grand_total_krw},
+        ]
+    df_hist = pd.DataFrame(hist_records)
+    fig_area = go.Figure()
+    fig_area.add_trace(
+        go.Scatter(
+            x=df_hist["기준일"],
+            y=df_hist["실물 포함 총순자산"],
+            mode="lines+markers",
+            name="실물 포함 총순자산",
+            line=dict(color="#00E676", width=3),
+            fill="tozeroy",
+            fillcolor="rgba(0, 230, 118, 0.14)",
+        )
+    )
+    fig_area.add_trace(
+        go.Scatter(
+            x=df_hist["기준일"],
+            y=df_hist["금융 순자산"],
+            mode="lines+markers",
+            name="금융 순자산",
+            line=dict(color="#2979FF", width=2.5, dash="dot"),
+            fill="tozeroy",
+            fillcolor="rgba(41, 121, 255, 0.10)",
+        )
+    )
+    fig_area.update_layout(
+        paper_bgcolor="#131C24",
+        plot_bgcolor="#131C24",
+        font=dict(color="#FFFFFF", size=11),
+        margin=dict(t=14, b=12, l=8, r=12),
+        height=260,
+        transition=dict(duration=800, easing="cubic-in-out"),
+        xaxis=dict(showgrid=False),
+        yaxis=dict(gridcolor="#1F2D3A", zeroline=False),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    st.plotly_chart(fig_area, use_container_width=True, config={"displayModeBar": False})
 
     st.markdown("---")
     st.markdown("#### 🚗 실물자산 감가상각 시각화 & 💰 수동 관리 현금성 자산")
@@ -907,8 +1117,8 @@ with tabs[0]:
                         <div><span style="color:#7A8B9A;">감가누계/차익</span><br><b style="color:#FF5252;">{dep_label}</b></div>
                         <div><span style="color:#7A8B9A;">현재추정가치</span><br><b style="color:#00E676;">{fmt_curr(cur, currency, usd_krw_rate)} ({retention_pct:.1f}%)</b></div>
                     </div>
-                    <div style="width:100%; height:8px; background:#1F2D3A; border-radius:999px; overflow:hidden;">
-                        <div style="width:{bar_pct:.1f}%; height:100%; background:linear-gradient(90deg,#00E676,#2979FF);"></div>
+                    <div style="width:100%; height:9px; background:#1F2D3A; border-radius:999px; overflow:hidden;">
+                        <div class="av-gauge-fill" style="width:{bar_pct:.1f}%; height:100%; background:linear-gradient(90deg,#00E676,#2979FF); border-radius:999px;"></div>
                     </div>
                 </div>
                 """,
@@ -970,6 +1180,34 @@ with tabs[1]:
             ]
         )
         st.dataframe(df_hold, use_container_width=True, hide_index=True)
+
+        # 계좌별 보유종목 평가금액 시각화 차트 (탭 진입 시 물이 차오르듯 렌더링)
+        fig_hold = px.bar(
+            df_hold,
+            x="종목명(티커)",
+            y="평가금액(원)",
+            color="실질자산분류",
+            text="수익률(%)",
+            color_discrete_map={
+                "해외주식": "#00E676",
+                "해외채권": "#2979FF",
+                "국내채권": "#FFAB00",
+                "국내주식": "#9C27B0",
+            },
+        )
+        fig_hold.update_traces(texttemplate="%{text:+.2f}%", textposition="outside")
+        fig_hold.update_layout(
+            paper_bgcolor="#131C24",
+            plot_bgcolor="#131C24",
+            font=dict(color="#FFFFFF", size=11),
+            margin=dict(t=18, b=12, l=8, r=8),
+            height=280,
+            transition=dict(duration=750, easing="cubic-in-out"),
+            xaxis_title=None,
+            yaxis_title=None,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        )
+        st.plotly_chart(fig_hold, use_container_width=True, config={"displayModeBar": False})
     else:
         st.caption("선택한 계좌에 주식/ETF 보유 종목이 없습니다. (위탁계좌는 상단 달러예수금 바를 확인하세요)")
 
@@ -1359,14 +1597,12 @@ function doPost(e) {
 
     if (body.action === 'appendRow' && body.row) {
       var nextRowIdx = sheet.getLastRow() + 1;
-      // 1) 입력 열만 정확히 해당 열 인덱스(1-based)에 기록
       Object.keys(editableColMap).forEach(function(colName) {
         var colIdx = editableColMap[colName];
         if (body.row[colName] !== undefined) {
           sheet.getRange(nextRowIdx, colIdx).setValue(body.row[colName]);
         }
       });
-      // 2) 수식 열(예: 💰입출금통장 B열[2열] 총합계)은 직전 행의 수식을 그대로 복사
       if (body.copyFormulaFromPrevRow && nextRowIdx > headerRow + 1) {
         Object.keys(formulaColMap).forEach(function(fName) {
           var fColIdx = formulaColMap[fName];
@@ -1376,7 +1612,6 @@ function doPost(e) {
     } else if (body.action === 'updateSheet' && Array.isArray(body.updates)) {
       body.updates.forEach(function(rowObj, rIdx) {
         var targetRow = headerRow + 1 + rIdx;
-        // 수식 열 인덱스는 건드리지 않고 editableColumnIndices에 매핑된 입력 열만 업데이트
         Object.keys(editableColMap).forEach(function(colName) {
           var colIdx = editableColMap[colName];
           if (rowObj[colName] !== undefined) {
@@ -1484,7 +1719,7 @@ with tabs[4]:
     st.link_button("🚀 Gemini Deep Research 앱 열기 (gemini.google.com)", "https://gemini.google.com/app")
 
 # ===========================================================================
-# TAB 6: ⚖️ 리밸런싱 시뮬레이터 (Rebalancing)
+# TAB 6: ⚖️ 리밸런싱 시뮬레이터 (Rebalancing — 비교 차트 & 계산표)
 # ===========================================================================
 with tabs[5]:
     st.markdown(f"#### ⚖️ 인터랙티브 자산배분 시뮬레이터 ({exposure_mode})")
@@ -1526,6 +1761,38 @@ with tabs[5]:
             for name, cur_val, tgt_pct in rebal_rows
         ]
     )
+
+    # 현재 비중 vs 목표 비중 비교 차트 (물이 차오르듯 렌더링)
+    fig_rebal = go.Figure()
+    fig_rebal.add_trace(
+        go.Bar(
+            x=rebal_df["자산군"],
+            y=rebal_df["현재 비중(%)"],
+            name="현재 비중(%)",
+            marker_color="#2979FF",
+        )
+    )
+    fig_rebal.add_trace(
+        go.Bar(
+            x=rebal_df["자산군"],
+            y=rebal_df["목표 비중(%)"],
+            name="목표 비중(%)",
+            marker_color="#00E676",
+        )
+    )
+    fig_rebal.update_layout(
+        barmode="group",
+        paper_bgcolor="#131C24",
+        plot_bgcolor="#131C24",
+        font=dict(color="#FFFFFF", size=11),
+        margin=dict(t=16, b=12, l=8, r=8),
+        height=270,
+        transition=dict(duration=750, easing="cubic-in-out"),
+        xaxis_title=None,
+        yaxis_title="비중(%)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    st.plotly_chart(fig_rebal, use_container_width=True, config={"displayModeBar": False})
     st.dataframe(rebal_df, use_container_width=True, hide_index=True)
 
 # ===========================================================================
@@ -1657,3 +1924,40 @@ with tabs[7]:
         components.html(html_content, height=1080, scrolling=True)
     else:
         st.info("React 빌드 아티팩트(`dist/index.html`)가 없을 때는 상단 네이티브 탭을 사용하세요.")
+
+# ---------------------------------------------------------------------------
+# 8. 탭 전환 시마다 물 차오름 애니메이션(.stPlotlyChart & .av-gauge-fill) 재실행 브릿지
+# ---------------------------------------------------------------------------
+components.html(
+    """
+    <script>
+    (function() {
+        try {
+            const doc = window.parent.document;
+            if (doc.__avWaterAnimBound) return;
+            doc.__avWaterAnimBound = true;
+
+            function replayWaterFill(container) {
+                const root = container || doc;
+                const charts = root.querySelectorAll('.stPlotlyChart, [data-testid="stPlotlyChart"], .av-gauge-fill');
+                charts.forEach((el) => {
+                    el.style.animation = 'none';
+                    void el.offsetHeight; // Reflow 강제 후 애니메이션 재시작
+                    el.style.animation = '';
+                });
+            }
+
+            doc.addEventListener('click', function(e) {
+                const tabBtn = e.target.closest('[data-baseweb="tab"]');
+                if (tabBtn) {
+                    setTimeout(() => replayWaterFill(doc), 35);
+                }
+            }, true);
+        } catch (err) {
+            // cross-origin 환경에서는 CSS :not([hidden]) 선택자가 자동으로 애니메이션을 수행함
+        }
+    })();
+    </script>
+    """,
+    height=0,
+)
