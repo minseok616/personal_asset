@@ -170,7 +170,7 @@ def get_gemini_api_key() -> str:
 
 
 def get_sheets_config() -> Dict[str, str]:
-    """Google Sheets 연동 정보(시트 ID, 시트 이름, Apps Script JSON API URL, 로컬 서비스계정 경로)를 반환합니다."""
+    """Google Sheets 연동 정보(시트 ID, 시트 이름, Apps Script JSON API URL, API_TOKEN, 로컬 서비스계정 경로)를 반환합니다."""
     return {
         "portfolio_api_url": str(
             get_secret(
@@ -178,6 +178,14 @@ def get_sheets_config() -> Dict[str, str]:
                 default="",
                 section="sheets",
                 env_fallbacks=["VITE_PORTFOLIO_API_URL", "APPS_SCRIPT_URL"],
+            )
+        ).strip(),
+        "api_token": str(
+            get_secret(
+                "API_TOKEN",
+                default="",
+                section="sheets",
+                env_fallbacks=["SHEETS_API_TOKEN", "PORTFOLIO_API_TOKEN"],
             )
         ).strip(),
         "spreadsheet_id": str(
@@ -205,3 +213,4 @@ def get_sheets_config() -> Dict[str, str]:
             )
         ).strip(),
     }
+

@@ -1,10 +1,15 @@
 """
-Google Sheets (gspread) 및 Apps Script JSON API 연동 모듈 (utils/gsheets_client.py)
+Google Sheets (gspread) 및 Apps Script JSON API 양방향(Read/Write) 연동 모듈 (utils/gsheets_client.py)
 
-인증 우선순위:
-1. `st.secrets["gcp_service_account"]`가 존재하면 `Credentials.from_service_account_info`로 인증
-2. 없으면 `.env`의 `GOOGLE_SERVICE_ACCOUNT_FILE` (또는 `GOOGLE_APPLICATION_CREDENTIALS`) 로컬 JSON 파일 경로로 인증
-3. `PORTFOLIO_API_URL`이 설정된 경우 Apps Script JSON API 응답과 병합/폴백 지원
+핵심 기능:
+1. 읽기(Read):
+   - 1순위: `st.secrets["sheets"]["PORTFOLIO_API_URL"]` (Apps Script `doGet`)
+   - 2순위: `st.secrets["gcp_service_account"]` (`Credentials.from_service_account_info`) 또는 로컬 JSON 파일을 통한 `gspread` 직접 조회
+2. 쓰기(Write — 비-KIS 수동 관리 자산 4대 시트 전용):
+   - KIS API 자동연동 자산은 읽기 전용(Read-Only)으로 보호
+   - `💰입출금통장`, `🌱예적금내역`, `🏠채권내역`, `🚗실물_기타자산`에 대해
+     `PORTFOLIO_API_URL`의 `doPost`로 `{ action, sheetName, row, updates, preserveFormulaColumns, token }` JSON POST 전송
+   - 수식 열(예: `💰입출금통장` B열 `총합계`, `🌱예적금내역` `만기수령액`, `🏠채권내역` `총 납입액`)은 덮어쓰지 않고 보존/복사하도록 필터링
 """
 
 from __future__ import annotations
@@ -24,6 +29,21 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive.readonly",
 ]
 
+# 시트별 수식 보호 열 정의 (앱에서 수정·저장 시 절대 덮어쓰지 않고 시트 수식을 유지/복사할 컬럼)
+FORMULA_PROTECTED_COLUMNS: Dict[str, List[str]] = {
+    "💰입출금통장": ["총합계"],
+    "🌱예적금내역": [
+        "만기일",
+        "만기수령액(세전)",
+        "만기수령액(세후)",
+        "만기수령액",
+        "세전이자",
+        "세후이자",
+    ],
+    "🏠채권내역": ["총 납입액"],
+    "🚗실물_기타자산": [],
+}
+
 
 @st.cache_resource(show_spinner=False)
 def get_gspread_client() -> Tuple[Optional[gspread.Client], str]:
@@ -35,7 +55,6 @@ def get_gspread_client() -> Tuple[Optional[gspread.Client], str]:
     gcp_sa_info = get_secret_section("gcp_service_account")
     if gcp_sa_info and gcp_sa_info.get("private_key") and gcp_sa_info.get("client_email"):
         try:
-            # private_key 내 이스케이프된 \n 복원 처리
             sa_dict = dict(gcp_sa_info)
             if isinstance(sa_dict.get("private_key"), str):
                 sa_dict["private_key"] = sa_dict["private_key"].replace("\\n", "\n")
@@ -60,7 +79,104 @@ def get_gspread_client() -> Tuple[Optional[gspread.Client], str]:
             except Exception as exc:
                 return None, f"로컬 JSON 인증 오류: {exc}"
 
-    return None, "미연결 (Apps Script API 또는 기본 스냅샷 사용)"
+    return None, "미연결 (Apps Script API 연동 모드)"
+
+
+def strip_formula_columns(
+    sheet_name: str, record: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    수식 보호 열(`FORMULA_PROTECTED_COLUMNS`)에 해당하는 키를 전송 페이로드에서 제외하여
+    구글 시트의 기존 수식(예: B열 `총합계`, `만기수령액`, `총 납입액`)이 덮어써지지 않도록 보장합니다.
+    """
+    protected = set(FORMULA_PROTECTED_COLUMNS.get(sheet_name, []))
+    return {k: v for k, v in record.items() if k not in protected}
+
+
+def post_sheet_write_action(
+    action: str,
+    sheet_name: str,
+    row: Optional[Dict[str, Any]] = None,
+    updates: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Google Apps Script 웹앱(`PORTFOLIO_API_URL`)의 `doPost(e)`로 비-KIS 수동 관리 자산의
+    수정/추가 요청을 JSON POST로 전송합니다.
+
+    전송 스키마:
+    {
+        "action": "updateRows" | "appendRow" | "upsertByDate",
+        "sheetName": "💰입출금통장" | "🌱예적금내역" | "🏠채권내역" | "🚗실물_기타자산",
+        "row": { ... },                 # 단일 행 추가/수정 시 (수식 열 제외됨)
+        "updates": [ { ... }, ... ],    # 테이블 전체/다중 행 수정 시 (수식 열 제외됨)
+        "preserveFormulaColumns": [...],# 덮어쓰지 않고 보존/복사할 수식 열 목록
+        "copyFormulaFromPrevRow": True, # 새 행 추가 시 이전 행 수식 자동 복사 플래그
+        "token": "<API_TOKEN>"          # st.secrets["sheets"]["API_TOKEN"]
+    }
+
+    성공 시 `st.cache_data.clear()`를 호출하여 최신 시트 데이터가 즉시 다시 로드되도록 합니다.
+    """
+    cfg = get_sheets_config()
+    api_url = cfg.get("portfolio_api_url", "")
+    api_token = cfg.get("api_token", "")
+
+    if not api_url:
+        return (
+            False,
+            "PORTFOLIO_API_URL이 설정되지 않았습니다. `.streamlit/secrets.toml` 또는 `.env`의 `[sheets]` 섹션을 확인해 주세요.",
+            {},
+        )
+
+    protected_cols = FORMULA_PROTECTED_COLUMNS.get(sheet_name, [])
+    sanitized_row = strip_formula_columns(sheet_name, row) if row else None
+    sanitized_updates = (
+        [strip_formula_columns(sheet_name, r) for r in updates]
+        if updates is not None
+        else None
+    )
+
+    payload: Dict[str, Any] = {
+        "action": action,
+        "sheetName": sheet_name,
+        "preserveFormulaColumns": protected_cols,
+        "copyFormulaFromPrevRow": True,
+        "token": api_token,
+    }
+    if sanitized_row is not None:
+        payload["row"] = sanitized_row
+    if sanitized_updates is not None:
+        payload["updates"] = sanitized_updates
+
+    try:
+        resp = requests.post(
+            api_url,
+            json=payload,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            allow_redirects=True,
+            timeout=25,
+        )
+        resp.raise_for_status()
+
+        # JSON 응답 파싱 시도 (Apps Script ContentService JSON 응답)
+        resp_json: Dict[str, Any] = {}
+        try:
+            resp_json = resp.json()
+        except Exception:
+            resp_json = {"status": "ok", "rawText": resp.text[:300]}
+
+        if isinstance(resp_json, dict) and resp_json.get("result") == "error":
+            err_msg = resp_json.get("message") or resp_json.get("error") or "Apps Script 처리 오류"
+            return False, f"구글 시트 저장 실패: {err_msg}", resp_json
+
+        # 캐시 즉시 초기화하여 대시보드 총자산 및 차트가 최신 데이터로 갱신되도록 처리
+        st.cache_data.clear()
+        return (
+            True,
+            f"✅ `{sheet_name}` 시트에 성공적으로 반영되었습니다! (수식 열 {protected_cols or '없음'} 보존됨)",
+            resp_json,
+        )
+    except Exception as exc:
+        return False, f"Apps Script POST 전송 중 오류 발생: {exc}", {}
 
 
 def _read_records_from_gspread(client: gspread.Client) -> Optional[Dict[str, Any]]:
@@ -80,7 +196,9 @@ def _read_records_from_gspread(client: gspread.Client) -> Optional[Dict[str, Any
         return None
 
     sheet_map = {
-        "manualCashAccounts": ["💰입출금통장", "입출금통장"],
+        "checkingAccounts": ["💰입출금통장", "입출금통장"],
+        "savings": ["🌱예적금내역", "예적금내역"],
+        "bonds": ["🏠채권내역", "채권내역"],
         "physicalAssets": ["🚗실물_기타자산", "실물_기타자산"],
         "kisRealtime": ["💾KIS_실시간잔고", "KIS_실시간잔고"],
         "kisActivity": ["💸KIS_배당및체결내역", "KIS_배당및체결내역"],
@@ -117,14 +235,12 @@ def fetch_portfolio_raw_payload() -> Tuple[Dict[str, Any], str]:
     sheets_cfg = get_sheets_config()
     api_url = sheets_cfg.get("portfolio_api_url", "")
 
-    # 1) Apps Script JSON API가 설정되어 있으면 호출
     if api_url:
         try:
             resp = requests.get(api_url, timeout=15, headers={"Accept": "application/json"})
             resp.raise_for_status()
             data = resp.json()
             if isinstance(data, dict) and data:
-                # gspread 서비스 계정도 연결되어 있다면 보완 시트 병합 가능
                 client, auth_label = get_gspread_client()
                 if client is not None:
                     gspread_data = _read_records_from_gspread(client)
@@ -137,14 +253,12 @@ def fetch_portfolio_raw_payload() -> Tuple[Dict[str, Any], str]:
         except Exception:
             pass
 
-    # 2) gspread 서비스 계정으로 직접 시트 조회
     client, auth_label = get_gspread_client()
     if client is not None:
         gspread_data = _read_records_from_gspread(client)
         if gspread_data:
             return gspread_data, f"gspread Direct ({auth_label})"
 
-    # 3) 안전한 기본 스냅샷 반환 (오프라인/초기 설정 전에도 에러 없이 렌더링)
     return get_default_fallback_payload(), "Fallback Snapshot (오프라인 안전 모드)"
 
 
@@ -154,7 +268,7 @@ def get_default_fallback_payload() -> Dict[str, Any]:
         "summary": {
             "기준일": "2026-11-15",
             "합계": 237029405,
-            "현금": 93112000,
+            "현금": 93110610,
             "예적금": 44130000,
             "주식": 28907669,
             "채권": 14191300,
@@ -162,45 +276,121 @@ def get_default_fallback_payload() -> Dict[str, Any]:
         "integratedSummary": {
             "총순자산_실물포함": 263349405,
             "금융순자산": 237029405,
-            "수동관리현금성": 93112000,
+            "수동관리현금성": 93110610,
             "실물자산합계": 26320000,
             "환율": 1336.57,
         },
-        "manualCashAccounts": [
-            {"구분": "주거래통장", "기관명": "하나은행", "항목명": "급여·주거래 통장", "잔액": 420000, "비고": "자동이체 허브"},
-            {"구분": "파킹통장", "기관명": "토스뱅크", "항목명": "토스뱅크 파킹통장", "잔액": 152000, "비고": "연 2.0% 일복리"},
-            {"구분": "CMA", "기관명": "미래에셋증권", "항목명": "미래에셋 CMA (RP형)", "잔액": 140000, "비고": "비상금 파킹"},
-            {"구분": "보유현금", "기관명": "실물/안전자금", "항목명": "보유 현금성 대기자금", "잔액": 36000000, "비고": "단기 유동성"},
-            {"구분": "증여금", "기관명": "가족증여", "항목명": "증여금 원금 보존분", "잔액": 50000000, "비고": "안전자산 시드"},
-            {"구분": "정부기여금", "기관명": "서민금융진흥원", "항목명": "청년도약계좌 정부기여금·누적분", "잔액": 6400000, "비고": "비과세 만기적립"},
+        "checkingAccounts": [
+            {
+                "날짜": "2026-11-15",
+                "총합계": 93110610,
+                "주거래 하나 통장": 510640,
+                "토스뱅크 통장": 199900,
+                "미래에셋 종합_CMA": 70,
+                "보유 현금": 36000000,
+                "증여금": 50000000,
+                "청년도약계좌 정부기여금": 6400000,
+            },
+            {
+                "날짜": "2026-10-15",
+                "총합계": 92450000,
+                "주거래 하나 통장": 450000,
+                "토스뱅크 통장": 180000,
+                "미래에셋 종합_CMA": 70,
+                "보유 현금": 35620000,
+                "증여금": 50000000,
+                "청년도약계좌 정부기여금": 6200000,
+            },
+        ],
+        "savings": [
+            {
+                "구분": "적금",
+                "은행": "하나은행 (청년도약계좌)",
+                "가입일": "2023-07-10",
+                "만기일": "2028-07-10",
+                "이율": 4.5,
+                "기간": 60,
+                "금액": 700000,
+                "비과세": "O",
+                "통화": "KRW",
+                "만기수령액(세전)": 42812795,
+                "만기수령액(세후)": 42812795,
+            },
+            {
+                "구분": "적금",
+                "은행": "신한은행 (청년처음적금)",
+                "가입일": "2025-02-15",
+                "만기일": "2027-02-15",
+                "이율": 5.0,
+                "기간": 24,
+                "금액": 300000,
+                "비과세": "X",
+                "통화": "KRW",
+                "만기수령액(세전)": 7575000,
+                "만기수령액(세후)": 7517250,
+            },
+            {
+                "구분": "청약",
+                "은행": "주택청약종합저축",
+                "가입일": "2021-03-01",
+                "만기일": "2030-03-01",
+                "이율": 3.1,
+                "기간": 108,
+                "금액": 100000,
+                "비과세": "O",
+                "통화": "KRW",
+                "만기수령액(세전)": 12300000,
+                "만기수령액(세후)": 12300000,
+            },
+        ],
+        "bonds": [
+            {
+                "채권명": "미국 국채 30년 (TLT/직투)",
+                "설명": "장기 금리 인하 사이클 듀레이션 베팅 및 달러 월배당",
+                "가입일": "2024-06-01",
+                "종료일": "2028-06-01",
+                "월 납입금액": 300000,
+                "총 납입액": 8700000,
+            },
+            {
+                "채권명": "국고채 및 우량 회사채 적립",
+                "설명": "안전자산 인컴 캐시플로우 확보용",
+                "가입일": "2025-01-10",
+                "종료일": "2027-12-31",
+                "월 납입금액": 250000,
+                "총 납입액": 5491300,
+            },
         ],
         "physicalAssets": [
             {
-                "항목명": "현대 디 올뉴코나",
+                "자산명": "현대 디 올뉴코나",
                 "카테고리": "자동차",
+                "취득일": "2025-03-10",
                 "취득원가": 28500000,
+                "연감가율(%)": 15,
                 "감가상각누계액": 5000000,
-                "현재추정가치": 23500000,
-                "연감가율": "연 15% 감가",
-                "비고": "2024년식 가솔린 1.6 터보",
+                "현재가치": 23500000,
+                "비고": "연 15% 정률 감가상각 반영",
             },
             {
-                "항목명": "아이폰 17 Pro",
+                "자산명": "아이폰 17 Pro",
                 "카테고리": "IT기기",
+                "취득일": "2025-10-05",
                 "취득원가": 2150000,
+                "연감가율(%)": 30,
                 "감가상각누계액": 250000,
-                "현재추정가치": 1900000,
-                "연감가율": "연 30% 감가",
-                "비고": "256GB 내추럴 티타늄",
+                "현재가치": 1900000,
+                "비고": "연 30% 정률 감가상각 반영",
             },
             {
-                "항목명": "순금 반지 (24K)",
+                "자산명": "순금 반지 (24K)",
                 "카테고리": "귀금속/현물",
+                "취득일": "2024-05-20",
                 "취득원가": 750000,
+                "연감가율(%)": 0,
                 "감가상각누계액": -170000,
-                "현재추정가치": 920000,
-                "연감가율": "현물 시세 연동",
-                "비고": "금 한돈(3.75g) 시세 반영",
+                "현재가치": 920000,
+                "비고": "금 한돈(3.75g) 현물 시세 연동",
             },
         ],
         "kisRealtime": [

@@ -5,30 +5,35 @@ AssetVision PRO — Streamlit Community Cloud 개인 자산관리 대시보드 (
 1. `st.secrets` 우선 조회 및 로컬 `.env` fallback 공통 헬퍼(`utils.secrets_helper`) 적용
 2. Google Sheets(`gspread`) 인증: `st.secrets["gcp_service_account"]` (`Credentials.from_service_account_info`) 우선, 로컬 JSON 파일 fallback
 3. KIS API 접근 토큰: 컨테이너 재시작 시 파일 유실을 방지하기 위해 `@st.cache_resource` 메모리 캐싱(`utils.kis_client`) 적용
-4. 아이폰 Safari 세로 화면 최적화: 모든 표(`st.dataframe`) 및 차트(`st.plotly_chart`)에 `use_container_width=True` 적용 및 모바일 반응형 CSS 탑재
+4. KIS API 자산은 읽기 전용(Read-Only)으로 보호하고, 비-KIS 수동 자산 4대 시트(`💰입출금통장`, `🌱예적금내역`, `🏠채권내역`, `🚗실물_기타자산`)는
+   앱 UI(`st.data_editor` & 입력 폼)에서 직접 수정·추가 시 Apps Script 웹앱(`PORTFOLIO_API_URL`)의 `doPost`로 즉시 반영 (수식 열 자동 보존)
+5. 아이폰 Safari 세로 화면 최적화: 모든 표(`st.dataframe`, `st.data_editor`) 및 차트(`st.plotly_chart`)에 `use_container_width=True` 적용
 """
 
 from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
-from utils.gsheets_client import fetch_portfolio_raw_payload, get_gspread_client
+from utils.gsheets_client import (
+    FORMULA_PROTECTED_COLUMNS,
+    fetch_portfolio_raw_payload,
+    get_gspread_client,
+    post_sheet_write_action,
+)
 from utils.kis_client import fetch_kis_direct_domestic_balance, get_kis_access_token
 from utils.secrets_helper import (
     get_gemini_api_key,
     get_kis_config,
-    get_secret,
     get_sheets_config,
 )
 
@@ -72,7 +77,6 @@ st.markdown(
         padding-right: 1rem !important;
         max-width: 1440px !important;
     }
-    /* KPI & 글래스모피즘 카드 */
     .av-card {
         background: #131C24;
         border: 1px solid #1F2D3A;
@@ -144,7 +148,6 @@ st.markdown(
         font-size: 0.72rem;
         font-weight: 700;
     }
-    /* 모바일 탭 스크롤 최적화 (iPhone Safari) */
     [data-baseweb="tab-list"] {
         gap: 6px !important;
         overflow-x: auto !important;
@@ -222,7 +225,7 @@ def classify_underlying_asset(row: Dict[str, Any]) -> str:
 
     if code.startswith("CASH_") or "예수금" in name:
         return "현금성 자산"
-    if "30년국채" in name or "미국채" in name or "채권" in name and ("미국" in name or "글로벌" in name):
+    if "30년국채" in name or "미국채" in name or ("채권" in name and ("미국" in name or "글로벌" in name)):
         return "해외채권"
     if "채권혼합" in name or "국고채" in name or "종합채권" in name:
         return "국내채권"
@@ -238,14 +241,21 @@ def classify_underlying_asset(row: Dict[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 4. 데이터 로드 및 정규화
+# 4. 데이터 로드 및 세션 오버라이드 병합 (시트 저장 직후 즉시 반영 보장)
 # ---------------------------------------------------------------------------
-raw_payload, data_source_label = fetch_portfolio_raw_payload()
+if "sheet_overrides" not in st.session_state:
+    st.session_state["sheet_overrides"] = {}
+
+raw_payload_fetched, data_source_label = fetch_portfolio_raw_payload()
+raw_payload = dict(raw_payload_fetched)
+for k_ov, v_ov in st.session_state["sheet_overrides"].items():
+    raw_payload[k_ov] = v_ov
+
 _, gspread_status = get_gspread_client()
 kis_token, kis_token_status = get_kis_access_token()
 kis_cfg = get_kis_config()
 
-# KIS API 직접 조회 계좌가 설정된 경우 실시간 잔고 보강
+# KIS API 직접 조회 계좌가 설정된 경우 실시간 잔고 보강 (읽기 전용)
 if kis_token and kis_cfg.get("cano_brokerage"):
     direct_rows = fetch_kis_direct_domestic_balance(
         kis_cfg["cano_brokerage"],
@@ -255,66 +265,216 @@ if kis_token and kis_cfg.get("cano_brokerage"):
     if direct_rows and not raw_payload.get("kisRealtime"):
         raw_payload["kisRealtime"] = direct_rows
 
-summary_raw = raw_payload.get("summary") or {}
-integrated_raw = raw_payload.get("integratedSummary") or {}
+summary_raw_obj = raw_payload.get("summary")
+summary_raw: Dict[str, Any] = summary_raw_obj if isinstance(summary_raw_obj, dict) else {}
+
+integrated_raw_obj = raw_payload.get("integratedSummary")
+if isinstance(integrated_raw_obj, dict):
+    integrated_raw: Dict[str, Any] = integrated_raw_obj
+elif isinstance(integrated_raw_obj, list):
+    integrated_raw = {
+        str(r.get("항목") or r.get("구분") or r.get("key") or idx): (
+            r.get("금액") or r.get("값") or r.get("value")
+        )
+        for idx, r in enumerate(integrated_raw_obj)
+        if isinstance(r, dict)
+    }
+else:
+    integrated_raw = {}
+
+asset_history_list = raw_payload.get("assetHistory")
+latest_hist_rate = (
+    to_num(asset_history_list[-1].get("환율"), 0)
+    if isinstance(asset_history_list, list) and len(asset_history_list) > 0 and isinstance(asset_history_list[-1], dict)
+    else 0.0
+)
 
 usd_krw_rate = to_num(
-    integrated_raw.get("환율") or summary_raw.get("환율"),
+    raw_payload.get("usdKrwRate")
+    or integrated_raw.get("환율")
+    or summary_raw.get("환율")
+    or latest_hist_rate,
     default=1336.57,
 )
 if usd_krw_rate < 900:
     usd_krw_rate = 1336.57
 
-# 수동 관리 입출금·현금·증여금·정부기여금
-manual_cash_rows: List[Dict[str, Any]] = raw_payload.get("manualCashAccounts") or [
-    {"구분": "주거래통장", "기관명": "하나은행", "항목명": "급여·주거래 통장", "잔액": 420000, "비고": "자동이체 허브"},
-    {"구분": "파킹통장", "기관명": "토스뱅크", "항목명": "토스뱅크 파킹통장", "잔액": 152000, "비고": "연 2.0% 일복리"},
-    {"구분": "CMA", "기관명": "미래에셋증권", "항목명": "미래에셋 CMA (RP형)", "잔액": 140000, "비고": "비상금 파킹"},
-    {"구분": "보유현금", "기관명": "실물/안전자금", "항목명": "보유 현금성 대기자금", "잔액": 36000000, "비고": "단기 유동성"},
-    {"구분": "증여금", "기관명": "가족증여", "항목명": "증여금 원금 보존분", "잔액": 50000000, "비고": "안전자산 시드"},
-    {"구분": "정부기여금", "기관명": "서민금융진흥원", "항목명": "청년도약계좌 정부기여금·누적분", "잔액": 6400000, "비고": "비과세 만기적립"},
+# ---------------------------------------------------------------------------
+# 4-A. 비-KIS 수동 관리 4대 시트 데이터 정규화
+#   1) 💰입출금통장 (checkingAccounts)
+#   2) 🌱예적금내역 (savings)
+#   3) 🏠채권내역 (bonds)
+#   4) 🚗실물_기타자산 (physicalAssets)
+# ---------------------------------------------------------------------------
+checking_rows: List[Dict[str, Any]] = raw_payload.get("checkingAccounts") or [
+    {
+        "날짜": "2026-11-15",
+        "총합계": 93110610,
+        "주거래 하나 통장": 510640,
+        "토스뱅크 통장": 199900,
+        "미래에셋 종합_CMA": 70,
+        "보유 현금": 36000000,
+        "증여금": 50000000,
+        "청년도약계좌 정부기여금": 6400000,
+    },
+    {
+        "날짜": "2026-10-15",
+        "총합계": 92450000,
+        "주거래 하나 통장": 450000,
+        "토스뱅크 통장": 180000,
+        "미래에셋 종합_CMA": 70,
+        "보유 현금": 35620000,
+        "증여금": 50000000,
+        "청년도약계좌 정부기여금": 6200000,
+    },
 ]
-manual_cash_total_krw = sum(to_num(r.get("잔액") or r.get("금액") or r.get("평가금액"), 0) for r in manual_cash_rows)
-if manual_cash_total_krw <= 0:
-    manual_cash_total_krw = 93_112_000
 
-# 실물 자산 (감가상각 포함)
+# 최신 행 기준 입출금통장 잔액 계산 (B열 총합계 수식과 동일하게 6개 계좌 합산)
+CHECKING_ACCOUNT_COLS = [
+    "주거래 하나 통장",
+    "토스뱅크 통장",
+    "미래에셋 종합_CMA",
+    "보유 현금",
+    "증여금",
+    "청년도약계좌 정부기여금",
+]
+for c_row in checking_rows:
+    calc_sum = sum(to_num(c_row.get(col), 0) for col in CHECKING_ACCOUNT_COLS)
+    if calc_sum > 0:
+        c_row["총합계"] = calc_sum
+
+latest_checking = checking_rows[0] if checking_rows else {}
+manual_cash_total_krw = to_num(latest_checking.get("총합계"), 93_110_610)
+if manual_cash_total_krw <= 0:
+    manual_cash_total_krw = 93_110_610
+
+manual_cash_rows: List[Dict[str, Any]] = [
+    {"구분": "주거래통장", "기관명": "하나은행", "항목명": "주거래 하나 통장", "잔액": to_num(latest_checking.get("주거래 하나 통장"), 510640)},
+    {"구분": "파킹통장", "기관명": "토스뱅크", "항목명": "토스뱅크 통장", "잔액": to_num(latest_checking.get("토스뱅크 통장"), 199900)},
+    {"구분": "CMA", "기관명": "미래에셋증권", "항목명": "미래에셋 종합_CMA", "잔액": to_num(latest_checking.get("미래에셋 종합_CMA"), 70)},
+    {"구분": "보유현금", "기관명": "실물/안전자금", "항목명": "보유 현금", "잔액": to_num(latest_checking.get("보유 현금"), 36000000)},
+    {"구분": "증여금", "기관명": "가족증여", "항목명": "증여금", "잔액": to_num(latest_checking.get("증여금"), 50000000)},
+    {"구분": "정부기여금", "기관명": "서민금융진흥원", "항목명": "청년도약계좌 정부기여금", "잔액": to_num(latest_checking.get("청년도약계좌 정부기여금"), 6400000)},
+]
+
+# 2) 🌱예적금내역 (savings)
+savings_rows: List[Dict[str, Any]] = raw_payload.get("savings") or [
+    {
+        "구분": "적금",
+        "은행": "하나은행 (청년도약계좌)",
+        "가입일": "2023-07-10",
+        "만기일": "2028-07-10",
+        "이율": 4.5,
+        "기간": 60,
+        "금액": 700000,
+        "비과세": "O",
+        "통화": "KRW",
+        "만기수령액(세전)": 42812795,
+        "만기수령액(세후)": 42812795,
+    },
+    {
+        "구분": "적금",
+        "은행": "신한은행 (청년처음적금)",
+        "가입일": "2025-02-15",
+        "만기일": "2027-02-15",
+        "이율": 5.0,
+        "기간": 24,
+        "금액": 300000,
+        "비과세": "X",
+        "통화": "KRW",
+        "만기수령액(세전)": 7575000,
+        "만기수령액(세후)": 7517250,
+    },
+    {
+        "구분": "청약",
+        "은행": "주택청약종합저축",
+        "가입일": "2021-03-01",
+        "만기일": "2030-03-01",
+        "이율": 3.1,
+        "기간": 108,
+        "금액": 100000,
+        "비과세": "O",
+        "통화": "KRW",
+        "만기수령액(세전)": 12300000,
+        "만기수령액(세후)": 12300000,
+    },
+]
+savings_total_krw = to_num(summary_raw.get("예적금"), 44_130_000)
+if "savings" in st.session_state["sheet_overrides"]:
+    # 사용자가 예적금내역을 수정한 경우 월납입액 * 기간 기반으로 총액 즉시 반영
+    est_sav_sum = sum(
+        to_num(r.get("금액"), 0) * max(to_num(r.get("기간"), 12) * 0.65, 1)
+        for r in savings_rows
+    )
+    if est_sav_sum > 0:
+        savings_total_krw = est_sav_sum
+
+# 3) 🏠채권내역 (bonds)
+bonds_rows: List[Dict[str, Any]] = raw_payload.get("bonds") or [
+    {
+        "채권명": "미국 국채 30년 (TLT/직투)",
+        "설명": "장기 금리 인하 사이클 듀레이션 베팅 및 달러 월배당",
+        "가입일": "2024-06-01",
+        "종료일": "2028-06-01",
+        "월 납입금액": 300000,
+        "총 납입액": 8700000,
+    },
+    {
+        "채권명": "국고채 및 우량 회사채 적립",
+        "설명": "안전자산 인컴 캐시플로우 확보용",
+        "가입일": "2025-01-10",
+        "종료일": "2027-12-31",
+        "월 납입금액": 250000,
+        "총 납입액": 5491300,
+    },
+]
+bond_direct_krw = sum(to_num(b.get("총 납입액"), 0) for b in bonds_rows) or to_num(
+    summary_raw.get("채권"), 14_191_300
+)
+
+# 4) 🚗실물_기타자산 (physicalAssets)
 physical_rows: List[Dict[str, Any]] = raw_payload.get("physicalAssets") or [
     {
-        "항목명": "현대 디 올뉴코나",
+        "자산명": "현대 디 올뉴코나",
         "카테고리": "자동차",
+        "취득일": "2025-03-10",
         "취득원가": 28500000,
+        "연감가율(%)": 15,
         "감가상각누계액": 5000000,
-        "현재추정가치": 23500000,
-        "연감가율": "연 15% 감가",
-        "비고": "2024년식 가솔린 1.6 터보",
+        "현재가치": 23500000,
+        "비고": "연 15% 정률 감가상각 반영",
     },
     {
-        "항목명": "아이폰 17 Pro",
+        "자산명": "아이폰 17 Pro",
         "카테고리": "IT기기",
+        "취득일": "2025-10-05",
         "취득원가": 2150000,
+        "연감가율(%)": 30,
         "감가상각누계액": 250000,
-        "현재추정가치": 1900000,
-        "연감가율": "연 30% 감가",
-        "비고": "256GB 내추럴 티타늄",
+        "현재가치": 1900000,
+        "비고": "연 30% 정률 감가상각 반영",
     },
     {
-        "항목명": "순금 반지 (24K)",
+        "자산명": "순금 반지 (24K)",
         "카테고리": "귀금속/현물",
+        "취득일": "2024-05-20",
         "취득원가": 750000,
+        "연감가율(%)": 0,
         "감가상각누계액": -170000,
-        "현재추정가치": 920000,
-        "연감가율": "현물 시세 연동",
-        "비고": "금 한돈(3.75g) 시세 반영",
+        "현재가치": 920000,
+        "비고": "금 한돈(3.75g) 현물 시세 연동",
     },
 ]
 physical_total_krw = sum(
-    to_num(r.get("현재추정가치") or r.get("현재가치") or r.get("평가금액"), 0) for r in physical_rows
+    to_num(r.get("현재가치") or r.get("현재추정가치") or r.get("잔존가치") or r.get("평가금액"), 0)
+    for r in physical_rows
 )
 if physical_total_krw <= 0:
     physical_total_krw = 26_320_000
 
-# KIS 실시간 잔고 분리 (현금성 예수금 vs 투자 종목)
+# ---------------------------------------------------------------------------
+# 4-B. KIS 실시간 잔고 분리 (읽기 전용: 현금성 예수금 vs 투자 종목)
+# ---------------------------------------------------------------------------
 kis_rows: List[Dict[str, Any]] = raw_payload.get("kisRealtime") or []
 cash_deposit_rows: List[Dict[str, Any]] = []
 stock_holding_rows: List[Dict[str, Any]] = []
@@ -328,9 +488,9 @@ for r in kis_rows:
     item = dict(r)
     item["실질자산분류"] = underlying_cls
     item["보유수량_num"] = to_num(r.get("보유수량"), 0)
-    item["매수평단가_num"] = to_num(r.get("매수평단가"), 0)
+    item["매수평단가_num"] = to_num(r.get("매수평단가") or r.get("매입평균가"), 0)
     item["현재가_num"] = to_num(r.get("현재가"), 0)
-    item["평가금액_num"] = to_num(r.get("평가금액"), 0)
+    item["평가금액_num"] = to_num(r.get("평가금액") or r.get("예수금"), 0)
     item["평가손익_num"] = to_num(r.get("평가손익"), 0)
     item["수익률_num"] = to_num(r.get("수익률(%)"), 0)
 
@@ -339,7 +499,6 @@ for r in kis_rows:
     else:
         stock_holding_rows.append(item)
 
-# MSFT(토스증권) 누락 시 보강
 if not any(str(h.get("종목코드")).upper() == "MSFT" for h in stock_holding_rows):
     stock_holding_rows.append(
         {
@@ -364,9 +523,6 @@ stock_profit_total_krw = sum(h["평가손익_num"] for h in stock_holding_rows) 
 stock_buy_total_krw = max(stock_eval_total_krw - stock_profit_total_krw, 1)
 stock_return_pct = (stock_profit_total_krw / stock_buy_total_krw) * 100
 
-savings_total_krw = to_num(summary_raw.get("예적금"), 44_130_000) or 44_130_000
-bond_direct_krw = to_num(summary_raw.get("채권"), 14_191_300) or 14_191_300
-
 financial_net_worth_krw = (
     manual_cash_total_krw
     + usd_deposit_krw
@@ -386,9 +542,6 @@ underlying_overseas_bond_krw = (
 )
 underlying_domestic_bond_krw = sum(
     h["평가금액_num"] for h in stock_holding_rows if h["실질자산분류"] == "국내채권"
-)
-underlying_domestic_stock_krw = sum(
-    h["평가금액_num"] for h in stock_holding_rows if h["실질자산분류"] == "국내주식"
 )
 
 
@@ -439,11 +592,12 @@ with top_col2:
         )
     with ctrl_c4:
         if st.button("🔄 갱신", use_container_width=True):
+            st.session_state["sheet_overrides"] = {}
             st.cache_data.clear()
             st.rerun()
 
 # ---------------------------------------------------------------------------
-# 6. 상단 4대 핵심 KPI 카드 (아이폰 세로 화면에서도 깔끔하게 자동 래핑)
+# 6. 상단 4대 핵심 KPI 카드
 # ---------------------------------------------------------------------------
 active_net_worth_krw = (
     grand_total_krw if net_worth_mode == "실물 포함 총순자산" else financial_net_worth_krw
@@ -470,7 +624,7 @@ with kpi2:
     st.markdown(
         f"""
         <div class="av-card">
-            <div class="av-label">STOCK & ETF 평가액 (자동연동)</div>
+            <div class="av-label">STOCK & ETF 평가액 (🔒 KIS 자동연동)</div>
             <div class="av-value">{fmt_curr(stock_eval_total_krw, currency, usd_krw_rate)}</div>
             <div class="av-sub" style="color:{pl_color}; font-weight:700;">
                 {sign_str}{stock_return_pct:.2f}% ({sign_str}{fmt_curr(stock_profit_total_krw, currency, usd_krw_rate)})
@@ -487,7 +641,7 @@ with kpi3:
             <div class="av-label">위탁 외화예수금 + 수동 현금성</div>
             <div class="av-value">{fmt_curr(manual_cash_total_krw + usd_deposit_krw, currency, usd_krw_rate)}</div>
             <div class="av-sub" style="color:#64B5F6;">
-                위탁 달러예수금 ${usd_deposit_usd:,.2f} 포함
+                위탁 달러예수금 ${usd_deposit_usd:,.2f} · 수동 {fmt_curr(manual_cash_total_krw, currency, usd_krw_rate)}
             </div>
         </div>
         """,
@@ -498,10 +652,10 @@ with kpi4:
     st.markdown(
         f"""
         <div class="av-card">
-            <div class="av-label">월 잉여현금흐름 & 저축률</div>
-            <div class="av-value">{fmt_curr(2_253_693, currency, usd_krw_rate)}</div>
+            <div class="av-label">예적금 + 직접채권 합계 (✏️ 시트동기화)</div>
+            <div class="av-value">{fmt_curr(savings_total_krw + bond_direct_krw, currency, usd_krw_rate)}</div>
             <div class="av-sub" style="color:#00E676;">
-                총저축률 57.6% · 순저축률 47.2%
+                예적금 {fmt_curr(savings_total_krw, currency, usd_krw_rate)} · 채권 {fmt_curr(bond_direct_krw, currency, usd_krw_rate)}
             </div>
         </div>
         """,
@@ -510,12 +664,13 @@ with kpi4:
 
 
 # ---------------------------------------------------------------------------
-# 7. 메인 탭 네비게이션 (iPhone Safari 터치 스크롤 지원)
+# 7. 메인 탭 네비게이션 (비-KIS 자산 관리 / 시트 수정 탭 포함)
 # ---------------------------------------------------------------------------
 tabs = st.tabs(
     [
         "📊 대시보드",
-        "💼 포트폴리오",
+        "💼 포트폴리오 (KIS 읽기전용)",
+        "✏️ 비-KIS 자산 관리 / 시트 수정",
         "📜 매매·배당",
         "🤖 AI 리서치",
         "⚖️ 리밸런싱",
@@ -593,32 +748,24 @@ with tabs[0]:
         st.markdown("#### 🏦 계좌별 자산 비중 (수동 + 한투 자동연동)")
         acc_df = pd.DataFrame(
             [
-                {"계좌": "수동 현금·증여·기여금", "평가액(원)": manual_cash_total_krw, "구분": "수동입력"},
-                {"계좌": "은행 예적금", "평가액(원)": savings_total_krw, "구분": "수동입력"},
-                {"계좌": "한투 위탁(달러예수금)", "평가액(원)": usd_deposit_krw, "구분": "자동연동"},
-                {"계좌": "실물·기타자산", "평가액(원)": physical_total_krw, "구분": "수동입력"},
+                {"계좌": "수동 현금·증여·기여금", "평가액(원)": manual_cash_total_krw, "구분": "수동관리(수정가능)"},
+                {"계좌": "은행 예적금", "평가액(원)": savings_total_krw, "구분": "수동관리(수정가능)"},
+                {"계좌": "한투 위탁(달러예수금)", "평가액(원)": usd_deposit_krw, "구분": "KIS 자동연동(읽기전용)"},
+                {"계좌": "실물·기타자산", "평가액(원)": physical_total_krw, "구분": "수동관리(수정가능)"},
+                {"계좌": "직접 보유 채권", "평가액(원)": bond_direct_krw, "구분": "수동관리(수정가능)"},
                 {
                     "계좌": "연금저축 (한투)",
                     "평가액(원)": sum(
                         h["평가금액_num"] for h in stock_holding_rows if "연금저축" in str(h.get("계좌구분"))
                     ),
-                    "구분": "자동연동",
+                    "구분": "KIS 자동연동(읽기전용)",
                 },
                 {
                     "계좌": "퇴직연금 (IRP)",
                     "평가액(원)": sum(
                         h["평가금액_num"] for h in stock_holding_rows if "IRP" in str(h.get("계좌구분"))
                     ),
-                    "구분": "자동연동",
-                },
-                {
-                    "계좌": "토스·ISA 계좌",
-                    "평가액(원)": sum(
-                        h["평가금액_num"]
-                        for h in stock_holding_rows
-                        if any(k in str(h.get("계좌구분")) for k in ("토스", "ISA"))
-                    ),
-                    "구분": "자동연동",
+                    "구분": "KIS 자동연동(읽기전용)",
                 },
             ]
         )
@@ -630,7 +777,10 @@ with tabs[0]:
             orientation="h",
             text="비중(%)",
             color="구분",
-            color_discrete_map={"수동입력": "#2979FF", "자동연동": "#00E676"},
+            color_discrete_map={
+                "수동관리(수정가능)": "#2979FF",
+                "KIS 자동연동(읽기전용)": "#00E676",
+            },
         )
         fig_bar.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
         fig_bar.update_layout(
@@ -652,11 +802,14 @@ with tabs[0]:
 
     with p_col1:
         for p in physical_rows:
-            name = p.get("항목명", "실물자산")
+            name = p.get("자산명") or p.get("항목명") or "실물자산"
             cost = to_num(p.get("취득원가"), 0)
             dep = to_num(p.get("감가상각누계액"), 0)
-            cur = to_num(p.get("현재추정가치") or p.get("현재가치"), 0)
-            rate_badge = p.get("연감가율", "연 15% 감가")
+            cur = to_num(p.get("현재가치") or p.get("현재추정가치") or p.get("잔존가치"), 0)
+            dep_rate_val = to_num(p.get("연감가율(%)") or p.get("연감가율"), 0)
+            rate_badge = (
+                f"연 {dep_rate_val:.0f}% 감가" if dep_rate_val > 0 else str(p.get("연감가율") or "현물 시세 연동")
+            )
             retention_pct = (cur / cost * 100) if cost > 0 else 100.0
             bar_pct = min(max(retention_pct, 5.0), 100.0)
             dep_label = (
@@ -689,14 +842,22 @@ with tabs[0]:
         st.dataframe(manual_df, use_container_width=True, hide_index=True)
 
 # ===========================================================================
-# TAB 2: 💼 포트폴리오 (Portfolio)
+# TAB 2: 💼 포트폴리오 (KIS OpenAPI 자동연동 — 읽기 전용)
 # ===========================================================================
 with tabs[1]:
-    st.markdown("#### 💵 계좌별 예수금 요약 바")
+    st.markdown(
+        """
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+            <span style="font-size:1.1rem; font-weight:800;">🔒 한국투자증권(KIS) 실시간 보유종목 및 예수금</span>
+            <span class="av-badge-mint">🔒 KIS OpenAPI 자동연동 (읽기 전용 / Read-Only)</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.info(
         f"**위탁계좌 외화예수금 (USD)**: `${usd_deposit_usd:,.2f}` "
         f"(원화환산 `{fmt_curr(usd_deposit_krw, currency, usd_krw_rate)}`) · "
-        f"수동 현금성 자산 합계: `{fmt_curr(manual_cash_total_krw, currency, usd_krw_rate)}`"
+        f"KIS 연동 자산은 API 스케줄러로 자동 적재되므로 읽기 전용으로 보호됩니다."
     )
 
     account_filter = st.radio(
@@ -733,10 +894,421 @@ with tabs[1]:
         st.caption("선택한 계좌에 주식/ETF 보유 종목이 없습니다. (위탁계좌는 상단 달러예수금 바를 확인하세요)")
 
 # ===========================================================================
-# TAB 3: 📜 매매·배당 (Trade & Dividend)
+# TAB 3: ✏️ 비-KIS 자산 관리 / 시트 수정 (Apps Script doPost 양방향 동기화)
 # ===========================================================================
 with tabs[2]:
-    st.markdown("#### 📜 KIS 매매체결 DB & 💸 해외주식 배당내역 DB")
+    st.markdown(
+        """
+        <div class="av-card-mint">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                <div>
+                    <span style="font-size:1.1rem; font-weight:800; color:#FFFFFF;">
+                        ✏️ 비-KIS 수동 관리 자산 직접 수정 · 구글 시트 양방향 동기화
+                    </span>
+                    <div style="font-size:0.8rem; color:#D1FAE5; margin-top:4px;">
+                        한국투자증권(KIS) 연동 자산은 읽기 전용으로 보호되며, 아래 4개 수동 시트(<b>💰입출금통장 · 🌱예적금내역 · 🏠채권내역 · 🚗실물_기타자산</b>)는
+                        수정 후 <b>[구글 시트에 저장]</b> 클릭 시 Apps Script <code>doPost</code>를 통해 시트에 즉시 반영(수식 열 자동 보존)됩니다.
+                    </div>
+                </div>
+                <span class="av-badge-mint">POST: st.secrets["sheets"]["PORTFOLIO_API_URL"]</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    sheet_subtabs = st.tabs(
+        [
+            "💰 입출금통장",
+            "🌱 예적금내역",
+            "🏠 채권내역",
+            "🚗 실물_기타자산",
+        ]
+    )
+
+    # -----------------------------------------------------------------------
+    # SUBTAB 1: 💰입출금통장 (B열 총합계 수식 덮어쓰기 방지 & 오늘자 행 추가)
+    # -----------------------------------------------------------------------
+    with sheet_subtabs[0]:
+        st.markdown("##### 💰 `💰입출금통장` 시트 편집 (🔒 B열 `총합계` 수식 자동 보존)")
+        st.caption(
+            "💡 표에서 날짜별 잔액을 직접 수정하거나, 아래 **[오늘 날짜 기준 새 행 추가]** 폼을 사용하세요. "
+            "**B열(`총합계`)**은 시트 수식이 깨지지 않도록 전송 시 덮어쓰지 않고 기존 수식을 유지/복사합니다."
+        )
+
+        df_checking_init = pd.DataFrame(checking_rows)
+        ordered_chk_cols = ["날짜", "총합계"] + CHECKING_ACCOUNT_COLS
+        for col in ordered_chk_cols:
+            if col not in df_checking_init.columns:
+                df_checking_init[col] = 0
+        df_checking_init = df_checking_init[ordered_chk_cols]
+
+        edited_checking_df = st.data_editor(
+            df_checking_init,
+            key="editor_checking_accounts",
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            disabled=["총합계"],  # B열 총합계 수식 열은 직접 덮어쓰지 못하도록 잠금
+            column_config={
+                "날짜": st.column_config.TextColumn("날짜 (A열)", required=True),
+                "총합계": st.column_config.NumberColumn(
+                    "🔒 총합계 (B열 수식유지)",
+                    help="구글 시트 B열의 SUM 수식이 그대로 유지되며 덮어쓰지 않습니다.",
+                    format="₩%d",
+                ),
+                "주거래 하나 통장": st.column_config.NumberColumn("하나은행", format="₩%d"),
+                "토스뱅크 통장": st.column_config.NumberColumn("토스뱅크", format="₩%d"),
+                "미래에셋 종합_CMA": st.column_config.NumberColumn("미래에셋 종합_CMA", format="₩%d"),
+                "보유 현금": st.column_config.NumberColumn("보유 현금", format="₩%d"),
+                "증여금": st.column_config.NumberColumn("증여금", format="₩%d"),
+                "청년도약계좌 정부기여금": st.column_config.NumberColumn("청년도약 정부기여금", format="₩%d"),
+            },
+        )
+
+        if st.button(
+            "💾 `💰입출금통장` 수정 내역 구글 시트에 저장",
+            key="btn_save_checking_table",
+            type="primary",
+            use_container_width=True,
+        ):
+            updated_records = edited_checking_df.to_dict(orient="records")
+            for r in updated_records:
+                r["총합계"] = sum(to_num(r.get(c), 0) for c in CHECKING_ACCOUNT_COLS)
+
+            # 세션 오버라이드 즉시 반영 + Apps Script doPost 호출 (B열 '총합계'는 strip_formula_columns로 제외됨)
+            st.session_state["sheet_overrides"]["checkingAccounts"] = updated_records
+            ok, msg, _ = post_sheet_write_action(
+                action="updateSheet",
+                sheet_name="💰입출금통장",
+                updates=updated_records,
+            )
+            if ok:
+                st.success(msg)
+            else:
+                st.warning(f"{msg} (현재 화면 세션에는 수정사항이 즉시 반영되었습니다.)")
+            st.cache_data.clear()
+            st.rerun()
+
+        with st.expander("➕ 오늘 날짜 기준 `💰입출금통장` 새 행 빠른 추가 (B열 총합계 수식 자동 복사)"):
+            with st.form("form_add_today_checking"):
+                f_c1, f_c2, f_c3 = st.columns(3)
+                with f_c1:
+                    new_chk_date = st.text_input("기준 날짜 (A열)", value=date.today().isoformat())
+                    new_hana = st.number_input(
+                        "주거래 하나 통장 (원)",
+                        min_value=0,
+                        value=int(to_num(latest_checking.get("주거래 하나 통장"), 510640)),
+                        step=10000,
+                    )
+                    new_toss = st.number_input(
+                        "토스뱅크 통장 (원)",
+                        min_value=0,
+                        value=int(to_num(latest_checking.get("토스뱅크 통장"), 199900)),
+                        step=10000,
+                    )
+                with f_c2:
+                    new_cma = st.number_input(
+                        "미래에셋 종합_CMA (원)",
+                        min_value=0,
+                        value=int(to_num(latest_checking.get("미래에셋 종합_CMA"), 70)),
+                        step=1000,
+                    )
+                    new_cash = st.number_input(
+                        "보유 현금 (원)",
+                        min_value=0,
+                        value=int(to_num(latest_checking.get("보유 현금"), 36000000)),
+                        step=100000,
+                    )
+                with f_c3:
+                    new_gift = st.number_input(
+                        "증여금 (원)",
+                        min_value=0,
+                        value=int(to_num(latest_checking.get("증여금"), 50000000)),
+                        step=100000,
+                    )
+                    new_gov = st.number_input(
+                        "청년도약계좌 정부기여금 (원)",
+                        min_value=0,
+                        value=int(to_num(latest_checking.get("청년도약계좌 정부기여금"), 6400000)),
+                        step=50000,
+                    )
+
+                submitted_chk = st.form_submit_button(
+                    "➕ 오늘 날짜 행 구글 시트에 추가 (B열 수식 복사)",
+                    use_container_width=True,
+                )
+                if submitted_chk:
+                    new_row = {
+                        "날짜": new_chk_date,
+                        "총합계": new_hana + new_toss + new_cma + new_cash + new_gift + new_gov,
+                        "주거래 하나 통장": new_hana,
+                        "토스뱅크 통장": new_toss,
+                        "미래에셋 종합_CMA": new_cma,
+                        "보유 현금": new_cash,
+                        "증여금": new_gift,
+                        "청년도약계좌 정부기여금": new_gov,
+                    }
+                    updated_list = [new_row] + [
+                        r for r in checking_rows if str(r.get("날짜")) != new_chk_date
+                    ]
+                    st.session_state["sheet_overrides"]["checkingAccounts"] = updated_list
+                    ok, msg, _ = post_sheet_write_action(
+                        action="appendRow",
+                        sheet_name="💰입출금통장",
+                        row=new_row,
+                    )
+                    if ok:
+                        st.success(msg)
+                    else:
+                        st.warning(f"{msg} (현재 화면 세션에는 즉시 반영되었습니다.)")
+                    st.cache_data.clear()
+                    st.rerun()
+
+    # -----------------------------------------------------------------------
+    # SUBTAB 2: 🌱예적금내역 (만기수령액 등 수식 열 보존)
+    # -----------------------------------------------------------------------
+    with sheet_subtabs[1]:
+        st.markdown("##### 🌱 `🌱예적금내역` 시트 편집 (🔒 `만기일` · `만기수령액` 수식 열 보존)")
+        st.caption(
+            "💡 `구분`, `은행`, `가입일`, `이율`, `기간`, `금액`, `비과세`, `통화` 입력 항목을 수정하거나 행을 추가할 수 있습니다. "
+            "수식 열(`만기일`, `만기수령액(세전)`, `만기수령액(세후)`)은 덮어쓰지 않고 시트 수식을 그대로 유지합니다."
+        )
+
+        df_sav_init = pd.DataFrame(savings_rows)
+        sav_cols = [
+            "구분",
+            "은행",
+            "가입일",
+            "이율",
+            "기간",
+            "금액",
+            "비과세",
+            "통화",
+            "만기일",
+            "만기수령액(세전)",
+            "만기수령액(세후)",
+        ]
+        for col in sav_cols:
+            if col not in df_sav_init.columns:
+                df_sav_init[col] = "" if col in ("구분", "은행", "가입일", "비과세", "통화", "만기일") else 0
+        df_sav_init = df_sav_init[sav_cols]
+
+        edited_sav_df = st.data_editor(
+            df_sav_init,
+            key="editor_savings_sheet",
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            disabled=["만기일", "만기수령액(세전)", "만기수령액(세후)"],
+            column_config={
+                "구분": st.column_config.SelectboxColumn("구분", options=["적금", "예금", "청약", "파킹"], required=True),
+                "은행": st.column_config.TextColumn("은행/상품명", required=True),
+                "가입일": st.column_config.TextColumn("가입일 (YYYY-MM-DD)"),
+                "이율": st.column_config.NumberColumn("이율(%)", format="%.2f%%"),
+                "기간": st.column_config.NumberColumn("기간(개월)", format="%d개월"),
+                "금액": st.column_config.NumberColumn("납입/예치 금액", format="₩%d"),
+                "비과세": st.column_config.SelectboxColumn("비과세", options=["O", "X"]),
+                "통화": st.column_config.SelectboxColumn("통화", options=["KRW", "USD"]),
+                "만기일": st.column_config.TextColumn("🔒 만기일 (수식유지)"),
+                "만기수령액(세전)": st.column_config.NumberColumn("🔒 만기수령액(세전·수식)", format="₩%d"),
+                "만기수령액(세후)": st.column_config.NumberColumn("🔒 만기수령액(세후·수식)", format="₩%d"),
+            },
+        )
+
+        if st.button(
+            "💾 `🌱예적금내역` 수정 내역 구글 시트에 저장",
+            key="btn_save_savings_table",
+            type="primary",
+            use_container_width=True,
+        ):
+            updated_sav = edited_sav_df.to_dict(orient="records")
+            st.session_state["sheet_overrides"]["savings"] = updated_sav
+            ok, msg, _ = post_sheet_write_action(
+                action="updateSheet",
+                sheet_name="🌱예적금내역",
+                updates=updated_sav,
+            )
+            if ok:
+                st.success(msg)
+            else:
+                st.warning(f"{msg} (현재 화면 세션에는 수정사항이 즉시 반영되었습니다.)")
+            st.cache_data.clear()
+            st.rerun()
+
+    # -----------------------------------------------------------------------
+    # SUBTAB 3: 🏠채권내역 (총 납입액 수식 열 보존)
+    # -----------------------------------------------------------------------
+    with sheet_subtabs[2]:
+        st.markdown("##### 🏠 `🏠채권내역` 시트 편집 (🔒 `총 납입액` 수식 열 보존)")
+        st.caption(
+            "💡 `채권명`, `설명`, `가입일`, `종료일`, `월 납입금액`을 수정하거나 새 채권을 추가할 수 있으며, `총 납입액` 수식 열은 유지됩니다."
+        )
+
+        df_bond_init = pd.DataFrame(bonds_rows)
+        bond_cols = ["채권명", "설명", "가입일", "종료일", "월 납입금액", "총 납입액"]
+        for col in bond_cols:
+            if col not in df_bond_init.columns:
+                df_bond_init[col] = "" if col in ("채권명", "설명", "가입일", "종료일") else 0
+        df_bond_init = df_bond_init[bond_cols]
+
+        edited_bond_df = st.data_editor(
+            df_bond_init,
+            key="editor_bonds_sheet",
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            disabled=["총 납입액"],
+            column_config={
+                "채권명": st.column_config.TextColumn("채권명", required=True),
+                "설명": st.column_config.TextColumn("설명"),
+                "가입일": st.column_config.TextColumn("가입일 (YYYY-MM-DD)"),
+                "종료일": st.column_config.TextColumn("종료일 (YYYY-MM-DD)"),
+                "월 납입금액": st.column_config.NumberColumn("월 납입금액", format="₩%d"),
+                "총 납입액": st.column_config.NumberColumn("🔒 총 납입액 (수식유지)", format="₩%d"),
+            },
+        )
+
+        if st.button(
+            "💾 `🏠채권내역` 수정 내역 구글 시트에 저장",
+            key="btn_save_bonds_table",
+            type="primary",
+            use_container_width=True,
+        ):
+            updated_bonds = edited_bond_df.to_dict(orient="records")
+            st.session_state["sheet_overrides"]["bonds"] = updated_bonds
+            ok, msg, _ = post_sheet_write_action(
+                action="updateSheet",
+                sheet_name="🏠채권내역",
+                updates=updated_bonds,
+            )
+            if ok:
+                st.success(msg)
+            else:
+                st.warning(f"{msg} (현재 화면 세션에는 수정사항이 즉시 반영되었습니다.)")
+            st.cache_data.clear()
+            st.rerun()
+
+    # -----------------------------------------------------------------------
+    # SUBTAB 4: 🚗실물_기타자산 (취득원가 / 감가상각 / 현재가치 수정·추가)
+    # -----------------------------------------------------------------------
+    with sheet_subtabs[3]:
+        st.markdown("##### 🚗 `🚗실물_기타자산` 시트 편집")
+        st.caption(
+            "💡 차량, IT기기, 귀금속 등 실물자산의 `취득원가`, `감가상각누계액`, `현재가치(잔존가치)` 등을 수정·추가하면 대시보드 총 순자산과 감가상각 바에 즉시 반영됩니다."
+        )
+
+        df_phys_init = pd.DataFrame(physical_rows)
+        phys_cols = [
+            "자산명",
+            "카테고리",
+            "취득일",
+            "취득원가",
+            "연감가율(%)",
+            "감가상각누계액",
+            "현재가치",
+            "비고",
+        ]
+        for col in phys_cols:
+            if col not in df_phys_init.columns:
+                df_phys_init[col] = "" if col in ("자산명", "카테고리", "취득일", "비고") else 0
+        df_phys_init = df_phys_init[phys_cols]
+
+        edited_phys_df = st.data_editor(
+            df_phys_init,
+            key="editor_physical_sheet",
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "자산명": st.column_config.TextColumn("자산명", required=True),
+                "카테고리": st.column_config.TextColumn("카테고리"),
+                "취득일": st.column_config.TextColumn("취득일"),
+                "취득원가": st.column_config.NumberColumn("취득원가", format="₩%d"),
+                "연감가율(%)": st.column_config.NumberColumn("연감가율(%)", format="%d%%"),
+                "감가상각누계액": st.column_config.NumberColumn("감가상각누계액", format="₩%d"),
+                "현재가치": st.column_config.NumberColumn("현재가치 (잔존가치)", format="₩%d"),
+                "비고": st.column_config.TextColumn("비고"),
+            },
+        )
+
+        if st.button(
+            "💾 `🚗실물_기타자산` 수정 내역 구글 시트에 저장",
+            key="btn_save_physical_table",
+            type="primary",
+            use_container_width=True,
+        ):
+            updated_phys = edited_phys_df.to_dict(orient="records")
+            st.session_state["sheet_overrides"]["physicalAssets"] = updated_phys
+            ok, msg, _ = post_sheet_write_action(
+                action="updateSheet",
+                sheet_name="🚗실물_기타자산",
+                updates=updated_phys,
+            )
+            if ok:
+                st.success(msg)
+            else:
+                st.warning(f"{msg} (현재 화면 세션에는 수정사항이 즉시 반영되었습니다.)")
+            st.cache_data.clear()
+            st.rerun()
+
+    with st.expander("🛠️ Google Apps Script 웹앱 `doPost(e)` 연동 핸들러 예시 코드 (수식 열 자동 보존 지원)"):
+        st.code(
+            """// Google Apps Script (Code.gs) — 비-KIS 자산 양방향 저장 핸들러 (수식 열 보호 포함)
+function doPost(e) {
+  try {
+    var body = JSON.parse(e.postData.contents);
+    var expectedToken = PropertiesService.getScriptProperties().getProperty('API_TOKEN');
+    if (expectedToken && body.token !== expectedToken) {
+      return ContentService.createTextOutput(JSON.stringify({ result: 'error', message: 'Unauthorized API_TOKEN' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(body.sheetName);
+    if (!sheet) throw new Error('Sheet not found: ' + body.sheetName);
+
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var protectedCols = body.preserveFormulaColumns || [];
+
+    if (body.action === 'appendRow' && body.row) {
+      var nextRowIdx = sheet.getLastRow() + 1;
+      headers.forEach(function(h, idx) {
+        var colNum = idx + 1;
+        if (protectedCols.indexOf(h) !== -1 && nextRowIdx > 2) {
+          // 이전 행의 수식(예: B열 총합계)을 새 행으로 그대로 복사
+          sheet.getRange(nextRowIdx - 1, colNum).copyTo(sheet.getRange(nextRowIdx, colNum));
+        } else if (body.row[h] !== undefined) {
+          sheet.getRange(nextRowIdx, colNum).setValue(body.row[h]);
+        }
+      });
+    } else if (body.action === 'updateSheet' && Array.isArray(body.updates)) {
+      body.updates.forEach(function(rowObj, rIdx) {
+        var targetRow = rIdx + 2; // 2행부터 데이터 영역
+        headers.forEach(function(h, cIdx) {
+          var colNum = cIdx + 1;
+          if (protectedCols.indexOf(h) === -1 && rowObj[h] !== undefined) {
+            sheet.getRange(targetRow, colNum).setValue(rowObj[h]);
+          }
+        });
+      });
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ result: 'success', sheetName: body.sheetName }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ result: 'error', message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}""",
+            language="javascript",
+        )
+
+# ===========================================================================
+# TAB 4: 📜 매매·배당 (Trade & Dividend — KIS 읽기 전용)
+# ===========================================================================
+with tabs[3]:
+    st.markdown("#### 📜 KIS 매매체결 DB & 💸 해외주식 배당내역 DB (🔒 KIS 읽기 전용)")
     trades_data = raw_payload.get("kisTrades") or [
         {"체결일시": "2026-11-12", "계좌구분": "연금저축", "매매구분": "매수", "종목명": "KODEX 미국S&P500", "수량": 25, "체결단가": 18900, "원화환산액": 472500},
         {"체결일시": "2026-11-08", "계좌구분": "퇴직연금(IRP)", "매매구분": "매수", "종목명": "TIGER 미국S&P500", "수량": 30, "체결단가": 19310, "원화환산액": 579300},
@@ -756,9 +1328,9 @@ with tabs[2]:
         st.dataframe(pd.DataFrame(dividends_data), use_container_width=True, hide_index=True)
 
 # ===========================================================================
-# TAB 4: 🤖 AI 리서치 (SaveTicker TOP 5 & Deep Research)
+# TAB 5: 🤖 AI 리서치 (SaveTicker TOP 5 & Deep Research)
 # ===========================================================================
-with tabs[3]:
+with tabs[4]:
     st.markdown("#### 🚀 SaveTicker AI 선정 긍정 전망 TOP 5 vs ⚠️ 부정·주의 TOP 5")
     bull_col, bear_col = st.columns(2)
 
@@ -820,9 +1392,9 @@ with tabs[3]:
     st.link_button("🚀 Gemini Deep Research 앱 열기 (gemini.google.com)", "https://gemini.google.com/app")
 
 # ===========================================================================
-# TAB 5: ⚖️ 리밸런싱 시뮬레이터 (Rebalancing)
+# TAB 6: ⚖️ 리밸런싱 시뮬레이터 (Rebalancing)
 # ===========================================================================
-with tabs[4]:
+with tabs[5]:
     st.markdown(f"#### ⚖️ 인터랙티브 자산배분 시뮬레이터 ({exposure_mode})")
     sim_c1, sim_c2, sim_c3, sim_c4, sim_c5 = st.columns(5)
     with sim_c1:
@@ -865,9 +1437,9 @@ with tabs[4]:
     st.dataframe(rebal_df, use_container_width=True, hide_index=True)
 
 # ===========================================================================
-# TAB 6: ✨ AI Copilot (AssetCopilot)
+# TAB 7: ✨ AI Copilot (AssetCopilot)
 # ===========================================================================
-with tabs[5]:
+with tabs[6]:
     st.markdown("#### ✨ AssetCopilot AI — 시트 & 현재 화면 컨텍스트 연동 비서")
     gemini_key = get_gemini_api_key()
 
@@ -904,7 +1476,6 @@ with tabs[5]:
     if active_prompt:
         st.session_state.copilot_messages.append({"role": "user", "content": active_prompt})
 
-        # Gemini API 호출 (설정된 경우) 또는 내장 실시간 분석 엔진 응답
         reply_text = ""
         if gemini_key:
             try:
@@ -954,9 +1525,9 @@ with tabs[5]:
             st.markdown(msg["content"])
 
 # ===========================================================================
-# TAB 7: 🖥️ 풀 웹앱 뷰 (React 빌드 내장 뷰)
+# TAB 8: 🖥️ 풀 웹앱 뷰 (React 빌드 내장 뷰)
 # ===========================================================================
-with tabs[6]:
+with tabs[7]:
     st.caption(
         "💡 아래 화면은 빌드된 React `AssetVision PRO` 인터랙티브 대시보드를 Streamlit 내부에서 직접 렌더링한 뷰입니다."
     )
@@ -993,4 +1564,4 @@ with tabs[6]:
         )
         components.html(html_content, height=1080, scrolling=True)
     else:
-        st.info("React 빌드 아티팩트(`dist/index.html`)가 없을 때는 상단 1~6번 네이티브 탭을 사용하세요.")
+        st.info("React 빌드 아티팩트(`dist/index.html`)가 없을 때는 상단 네이티브 탭을 사용하세요.")
